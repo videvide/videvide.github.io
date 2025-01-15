@@ -1,7 +1,6 @@
 +++
 title = "The Document Object Model (DOM)"
 date = 2025-01-14T17:47:00+01:00
-draft = true
 tags = ["frontend", "browser"]
 categories = ["web development"]
 +++

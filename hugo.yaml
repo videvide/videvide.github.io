@@ -3,6 +3,16 @@ languageCode: en-us
 title: bXkgYXdlc29tZSBibG9n
 theme: ["PaperMod"]
 enableRobotsTXT: true
+menu:
+  main:
+    - identifier: categories
+      name: categories
+      url: /categories/
+      weight: 10
+    - identifier: tags
+      name: tags
+      url: /tags/
+      weight: 20
 services:
   disqus:
     shortname: videvide

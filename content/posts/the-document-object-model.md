@@ -28,10 +28,10 @@ This is an example of the tree structure:
 
 ```
 
-We can then use JavaScript to read, modify and update this tree via the [**Document API**](https://developer.mozilla.org/en-US/docs/Web/API/Document). E.g., grabbing a specific HTML element by its id:
+We can now use JavaScript to read, modify, and update this tree via the [**Document API**](https://developer.mozilla.org/en-US/docs/Web/API/Document). E.g., grabbing a specific HTML element by its id:
 
 ```javascript
-const myInput = document.getElementById('#myInput')
+const myInput = document.getElementById('myInput')
 ```
 
 Then adding an event listener to validate it on user input:

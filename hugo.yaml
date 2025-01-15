@@ -7,6 +7,15 @@ services:
     shortname: videvide
 params:
   comments: true
+  author: "Vide Krajnc"
+  ShowReadingTime: true
+  ShowBreadCrumbs: true
+  ShowPostNavLinks: true
+  ShowCodeCopyButtons: true
+  editPost:
+    URL: "https://github.com/videvide/videvide.github.io"
+    Text: "Suggest Changes"
+    appendFilePath: true
   homeInfoParams:
     Title: Welcome to my awesome blog! 👋
     Content: |
@@ -16,3 +25,8 @@ params:
 
 
       Feel free to suggest changes and leave comments!
+  socialIcons:
+    - name: "github"
+      url: "https://github.com/videvide"
+    - name: "discord"
+      url: "https://discord.com/users/vide2433"

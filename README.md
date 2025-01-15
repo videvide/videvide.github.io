@@ -1,7 +1,11 @@
-## Welcome to my awesome blog! 👋
+# my awesome blog
 
-I use this space to explore and better understand the topics I'm curious about.
-Large language models (LLMs) assist me with writing and research, while search engines 
-are my greatest asset for diving deeper and finding references.
-    
-Feel free to suggest changes and leave comments!
+Welcome to my personal blog powered by [Hugo](https://gohugo.io/) and hosted on GitHub Pages! This repository contains the source code and content for my blog.
+
+## features
+
+- Built with Hugo for fast and flexible static site generation.
+- Deployed using GitHub Pages for easy hosting and continuous deployment.
+- Markdown-based content management for simplicity.
+
+[Visit the blog](https://bxkgyxdlc29tzsbibg9n.xyz/)

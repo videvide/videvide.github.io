@@ -2,7 +2,11 @@ baseURL: https://bxkgyxdlc29tzsbibg9n.xyz/
 languageCode: en-us
 title: bXkgYXdlc29tZSBibG9n
 theme: ["PaperMod"]
+services:
+  disqus:
+    shortname: videvide
 params:
+  comments: true
   homeInfoParams:
     Title: Welcome to my awesome blog! 👋
     Content: |
@@ -10,6 +14,5 @@ params:
       Large language models (LLMs) assist me with writing and research, while search engines 
       are my greatest asset for diving deeper and finding references.
 
-      
+
       Feel free to suggest changes and leave comments!
-      

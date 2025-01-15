@@ -2,6 +2,7 @@ baseURL: https://bxkgyxdlc29tzsbibg9n.xyz/
 languageCode: en-us
 title: bXkgYXdlc29tZSBibG9n
 theme: ["PaperMod"]
+enableRobotsTXT: true
 services:
   disqus:
     shortname: videvide

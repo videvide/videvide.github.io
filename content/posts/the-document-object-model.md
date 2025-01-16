@@ -30,7 +30,7 @@ The **DOM tree** is a *data structure* created when a web browser parses an HTML
 ```html
 <html>
   <body>
-    <h1>Hello World</h1>
+    <h1>Hello World!</h1>
     <p>This is a paragraph.</p>
   </body>
 </html>
@@ -42,7 +42,7 @@ The DOM tree for this would look like:
 html
 └── body
     ├── h1
-    │   └── "Hello World"
+    │   └── "Hello World!"
     └── p
         └── "This is a paragraph."
 ```

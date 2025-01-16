@@ -23,6 +23,7 @@ params:
   ShowBreadCrumbs: true
   ShowPostNavLinks: true
   ShowCodeCopyButtons: true
+  ShowShareButtons: true
   editPost:
     URL: "https://github.com/videvide/videvide.github.io"
     Text: "Suggest Changes"

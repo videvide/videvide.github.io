@@ -103,6 +103,6 @@ This is how JavaScript can respond to user actions, making webpages interactive.
 
 ### **Conclusion: Understanding the DOM**  
 
-In summary, the Document Object Model (DOM) is a crucial tool that lets programming languages, especially JavaScript, interact with and change the content, structure, and style of a web page. When a browser loads a webpage, it reads the HTML and creates a DOM tree, a hierarchical model of the document. The DOM API offers a set of functions to access and modify this tree, allowing developers to update webpages dynamically. Additionally, the DOM enables event handling, letting webpages respond to user actions like clicks and keypresses, which is essential for building interactive web applications.
+In summary, the Document Object Model (DOM) is a crucial tool that lets programming languages, especially JavaScript, interact with and change the content, structure, and style of a web page. When a browser loads a webpage, it parses the HTML and creates a DOM tree, a hierarchical model of the document. The DOM API offers a set of functions to access and modify this tree, allowing developers to update webpages dynamically. Additionally, the DOM enables event handling, letting webpages respond to user actions like clicks and keypresses, which is essential for building interactive web applications.
 
 With these concepts, you can manipulate web content, react to user interactions, and create dynamic and engaging web experiences.

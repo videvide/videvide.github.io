@@ -6,13 +6,13 @@ categories = ["frontend"]
 +++
 The DOM, or **Document Object Model**, is a feature provided by web browsers that lets programming languages, especially JavaScript, interact with and change the structure, content, and style of a web document, typically an HTML document.
 
-When a browser loads a webpage, it reads (parses) the HTML markup and creates a tree-like structure called the DOM (Document Object Model) tree. This tree represents the structure and hierarchy of the document. Each element, attribute, and piece of text in the document is represented as a **node** in this tree.
+When a browser loads a webpage, it parses the HTML markup and creates a tree-like structure called the DOM (Document Object Model) tree. This tree represents the structure and hierarchy of the document. Each element, attribute, and piece of text in the document is represented as a **node** in this tree.
 
 The browser also provides the DOM API, a set of tools that lets JavaScript interact with and change the DOM tree. This includes handling user events like clicks, keypresses, and mouse movements.
 
 ### **The DOM Tree (Data Structure)**  
 
-The **DOM tree** is a *data structure* created when a web browser reads (parses) an HTML document.
+The **DOM tree** is a *data structure* created when a web browser parses an HTML document.
 
 - Think of it as a **map** of the web page's structure.  
 - Each HTML element becomes a **node** in the tree.  

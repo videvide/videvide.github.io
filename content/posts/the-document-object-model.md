@@ -10,7 +10,7 @@ The DOM was first introduced by the World Wide Web Consortium (W3C) in the late 
 
 This post provides a basic introduction to the DOM, explaining its structure, how to interact with it using JavaScript, and how to handle user events.
 
-### **The Browser Loads The Page (HTML Document)**
+### **The Browser Loads The Page**
 
 When a browser loads a webpage, it parses the HTML markup and creates a tree-like structure called the DOM (Document Object Model) tree. This tree represents the structure and hierarchy of the document. Each element, attribute, and piece of text in the document is represented as a **node** in this tree.
 

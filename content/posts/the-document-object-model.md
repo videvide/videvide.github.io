@@ -1,6 +1,7 @@
 +++
 title = "A Basic Introduction To The Document Object Model (DOM)"
 date = 2025-01-14T17:47:00+01:00
+lastmod = 2025-01-16
 tags = ["document object model", "browser", "javascript"]
 categories = ["frontend"]
 +++

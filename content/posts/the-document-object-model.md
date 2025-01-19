@@ -51,7 +51,7 @@ html
 - The `<html>` element is the root of the tree.  
 - The `<body>` element is a **child** of `<html>`.  
 - `<h1>` and `<p>` are **children** of `<body>`.  
-- `"Hello World"` and `"This is a paragraph."` are **text nodes** under their respective elements.
+- `"Hello World!"` and `"This is a paragraph."` are **text nodes** under their respective elements.
 
 The **tree** is just data stored in memory by the browser—it's a model that represents the document structure.
 

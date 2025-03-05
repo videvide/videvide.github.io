@@ -1,7 +1,7 @@
 +++
 title = "How To Run Caddy Behind Cloudflare Reverse Proxy With Full TLS🔒"
 date = 2025-03-05T20:28:00+01:00
-tags = ["caddy", "cloudflare", "tls", "dns", "security", "reverse proxy" "go", "debian"]
+tags = ["caddy", "cloudflare", "tls", "dns", "security", "reverse proxy", "go", "debian"]
 categories = ["sysadmin"]
 +++
 ### Steps to take

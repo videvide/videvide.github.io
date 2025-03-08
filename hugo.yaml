@@ -41,6 +41,8 @@ params:
 
       Feel free to suggest changes and leave comments!
   socialIcons:
+    - name: "email"
+      url: "mailto:krajncvide53@gmail.com"
     - name: "github"
       url: "https://github.com/videvide"
     - name: "discord"

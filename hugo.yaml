@@ -31,9 +31,14 @@ params:
   homeInfoParams:
     Title: Welcome to my awesome blog! 👋
     Content: |
-      I use this space to explore and better understand the topics I'm curious about.
-      Large language models (LLMs) assist me with writing and research, while search engines 
-      are my greatest asset for diving deeper and finding references.
+      I am Vide Krajnc, a self-taught software developer and visual artist. 
+
+      -
+
+      This blog is a tool to explore, document and better understand the topics I am curious about.
+
+      -
+
       Feel free to suggest changes and leave comments!
   socialIcons:
     - name: "github"

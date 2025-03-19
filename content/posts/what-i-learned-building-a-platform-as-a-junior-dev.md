@@ -6,7 +6,9 @@ tags = ["hohle.art"]
 categories = ["hohle.art"]
 +++
 
-I was not satisfied with the available options to host my art online. I wanted to host it on Artsy, but they require you to go through an already established and reputable gallery. I also figured there must be more artists like me that are looking for a cool yet professional alternative to the current available platforms – that’s why I decided to build a new online art platform and name it hohle.art (after the caves that are of important archaeological finds dating from the upper paleolithic).
+I was not satisfied with the available options to host my art online. I wanted to host it on Artsy, but they require you to go through an already established and reputable gallery. I also figured there must be more artists like me that are looking for a cool yet professional alternative to the current available platforms.
+
+That’s why I decided to build a new online art platform and name it hohle.art (after the caves that are of important archaeological finds dating from the upper paleolithic).
 
 This was a great opportunity to build what I was looking for, and at the same time learn the technologies and techniques composing a modern web application. Something that could help me jump-start my art career and also either land me a job as a developer or secure projects as a contractor.
 

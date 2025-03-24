@@ -8,4 +8,4 @@ Welcome to my personal blog powered by [Hugo](https://gohugo.io/) and hosted on 
 - Deployed using GitHub Pages for easy hosting and continuous deployment.
 - Markdown-based content management for simplicity.
 
-[Visit the blog](https://bxkgyxdlc29tzsbibg9n.xyz/)
+[Visit the blog](https://videvide.github.io/)

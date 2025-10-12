@@ -1,5 +1,5 @@
 languageCode: en-us
-title: My Awesome Blog
+title: videvide.github.io
 theme: ["PaperMod"]
 enableRobotsTXT: true
 menu:
@@ -28,17 +28,8 @@ params:
     Text: "Suggest Changes"
     appendFilePath: true
   homeInfoParams:
-    Title: Welcome to my awesome blog! 👋
-    Content: |
-      I am Vide Krajnc, a self-taught software developer and visual artist. 
-
-      -
-
-      This blog is a tool to explore, document and better understand the topics I am curious about.
-
-      -
-
-      Feel free to suggest changes and leave comments!
+    Title: Welcome to my awesome blog 👋
+    Content: Feel free to suggest changes and leave comments.
   socialIcons:
     - name: "email"
       url: "mailto:krajncvide53@gmail.com"
@@ -48,9 +39,3 @@ params:
       url: "https://discord.com/users/vide2433"
     - name: "other"
       url: "https://hohle.art"
-    - name: "instagram"
-      url: "https://instagram.com/krajncvide53"
-    - name: "pinterest"
-      url: "https://se.pinterest.com/krajncvide53/"
-    - name: "kofi"
-      url: "https://ko-fi.com/videkrajnc"

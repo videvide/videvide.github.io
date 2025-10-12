@@ -1,6 +1,5 @@
 ---
 date: '2025-10-12T15:23:53+02:00'
-draft: true
 title: 'Learn About JavaScript and Its Ecosystem While Building a Toy Project 🪀'
 tags: ["javascript", "node", "vite", "typescript", "express", "mongodb"]
 categories: ["full-stack"]

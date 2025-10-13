@@ -448,8 +448,173 @@ We also add this to print to the console what type of server we are running:
 
 To test that everything is working as expected, we start our dev server then visit the web page in the browser, then we add a h1 tag inside our index.html file saying "Hello, World!" and save. It should render in the browser without any server restart. 
 
-We can now move on to more client/frontend specific code.
+Remove the h1 tag before moving on.
 
 ### Client-side navigation and routing 
 
-...coming soon
+To achieve client-side navigation without using an external framework we need to work with some properties and methods of the JavaScript [Window object](https://developer.mozilla.org/en-US/docs/Web/API/Window). 
+
+The window object, through its properties and methods, gives us access to the browser’s built-in functionalities that allow us to control navigation and manage the browser history.
+
+Let's walk it through to get a better understanding of how it all works.
+
+What we need:
+
+1. Navigation links ([anchor elements](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/a)) for the user to click to visit each page.
+2. "Container" html element where we dynamically render our pages content.
+3. [Custom data attribute](https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/Use_data_attributes) to allow us to target our links with JavaScript.
+4. Decide on page layout that will render each page.
+5. JavaScript function that listens to link clicks and render the correct page content.
+6. JavaScript function that updates the browsers history throught the History API.
+7. JavaScript function that listens to back and forward navigations with the browser, and render the correct pages content.
+
+**Since we are using TypeScript we will type everything.**
+
+We start with adding our navigation links and the container element to the index.html file. We add them inside the already created div element that has the id="app".
+
+```html 
+<!-- other html code -->
+<div id="app">
+  <nav id="navigation">
+    <a href="/" data-link>Home</a>
+    <a href="/dashboard" data-link>Dashboard</a>
+  </nav>
+  <div id="page-content"></div>
+</div>
+<!-- other html code -->
+```
+
+Next, we define the types for our pages and routing functions. 
+
+Inside the frontend directory, create a new file called types.ts:
+```js
+// this is used for our page functions
+export type RouteEntry = {
+  html: () => string;
+  // we make this async to be sure we can run async code further down the line
+  logic: async () => void;
+};
+
+// this is used by our router function
+export type Routes = Record<string, RouteEntry>;
+```
+
+We define that our pages (RouteEntry) will return an object with two functions, one that return the html, and one that returns the page logic.
+
+Now, let's create our home page and our dashboard page, and while at it we also create a page for any request to a page that does not exists, i.e. "page not found, 404".
+
+```js
+import type { RouteEntry } from "../types";
+
+export function HomePage(): RouteEntry {
+  return {
+    html: () => `
+        <h1>Home Page</h1>
+    `, // this is where you return your page html
+    logic: async () => {
+      // this is where you write your page logic
+      // e.g. console.log("Hello from home page");
+    },
+  };
+}
+
+```
+
+Create all three and put them inside the /src/frontend/pages directory: 
+```bash 
+pages
+├── 404.ts
+├── dashboard.ts
+└── home.ts
+```
+
+Inside the routes.ts file we import the Routes type from types.ts and all the pages from their respective files, and then export our routes object, and a type for the pathName that we will use in our router function: 
+```js
+import type { Routes } from "./types";
+import { HomePage } from "./pages/home";
+import { DashboardPage } from "./pages/dashboard";
+import { PageNotFound } from "./pages/404";
+
+export const routes = {
+  "404": PageNotFound(),
+  "/": HomePage(),
+  "/dashboard": DashboardPage(),
+} satisfies Routes;
+
+export type pathName = keyof typeof routes;
+```
+
+Finally we add the functionality to our router.ts module:
+```js
+import { routes, type pathName } from "./routes";
+
+// function to render the page content
+async function renderContent(pathname: pathName) {
+  // target the page-content element inside index.html
+  const contentElement = document.getElementById("page-content");
+  if (contentElement) {
+    // render the page html
+    contentElement.innerHTML = routes[pathname].html();
+    // render the page logic
+    await routes[pathname].logic();
+  }
+}
+
+// function to navigate to a page
+function navigateTo(pathname: string) {
+  // check if pathname is part of our routes object
+  if (pathname in routes) {
+    // render page content
+    renderContent(pathname as pathName);
+  } else {
+    // render 404 page
+    renderContent("404");
+  }
+  // push new state to browser history to enable browser back and forward press
+  history.pushState({ pathname: pathname }, "", pathname);
+}
+
+// target all the links inside our index.html file
+document.querySelectorAll<HTMLAnchorElement>("a[data-link]").forEach((link) => {
+  // add event listener for click
+  link.addEventListener("click", (e) => {
+    // prevent from navigating with full page reload
+    e.preventDefault();
+    // extract the url from the target href
+    const url = new URL(link.href);
+    // provide the pathname
+    navigateTo(url.pathname);
+  });
+});
+
+// handle back and forward navigations from the browser
+window.addEventListener("popstate", (e) => {
+  // check that state is valid
+  if (e.state && "pathname" in e.state) {
+    if (e.state.pathname in routes) {
+      // then render correct page
+      renderContent(e.state.pathname);
+    } else {
+      // or 404
+      renderContent("404");
+    }
+  }
+});
+
+// Initial site render when the JavaScript is loaded into the browser
+const initialPath = window.location.pathname;
+// set the history state to the current path
+history.replaceState({ pathname: initialPath }, "", initialPath);
+// render first page that user visits
+if (initialPath in routes) {
+  renderContent(window.location.pathname as pathName);
+} else {
+  renderContent("404");
+}
+```
+
+Now we can use our client-side navigation 🎉
+
+### Writing page logic and corresponding Express routes
+
+coming soon...

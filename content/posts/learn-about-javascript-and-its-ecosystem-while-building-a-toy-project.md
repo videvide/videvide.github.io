@@ -615,4 +615,217 @@ Now we can use our client-side navigation 🎉
 
 ### Writing page logic and corresponding Express routes
 
+Let's write a small form that can create and edit blog posts and place it in dashboard.ts:
+
+```html
+<form method="post" id="blog-form">
+  <label for="blog-title">Blog Title</label>
+  <input type="text" name="blog-title" id="blog-title">
+  <label for="blog-text">Blog Text</label>
+  <textarea name="blog-text" id="blog-text" rows="4" cols="12"></textarea>
+  <button id="submit-button">Create Post</button>
+</form>
+```
+
+We create the JavaScript logic that handle the form submit:
+
+```js
+// we add an event listner to the submit button
+blogForm.addEventListener("submit", async (e) => {
+  // prevent the form submit
+  e.preventDefault();
+  // we add the input values to an object 
+  const formData: BlogPostFormData = {
+    blogTitle: blogTitle.value,
+    blogText: blogText.value,
+  };
+  // and send the data to the backend
+  try {
+    const response = await fetch("http://localhost:3000/dashboard", {
+      // using post method
+      method: "post",
+      // declare we use json format
+      headers: {
+        "content-type": "application/json",
+      },
+      // then parse our data into json
+      body: JSON.stringify(formData),
+    });
+    // we read the response from the server
+    // ... 
+    // then remove value from form input fields
+    blogTitle.value = "";
+    blogText.value = "";
+  } catch (error) {
+    console.log(error);
+  }
+});
+```
+
+It's time to create the backend route to receive and save the data, including the database logic. **This also gives us a good opportunity to write some tests!**
+
+#### These are the steps to take: 
+
+1. Install MongoDB, MongoDB client, and mongodb-memory-server (to test our code)
+2. Write MongoDB logic 
+3. Write the Express route to receive incoming form data
+4. Write a data validation function to validate incoming form data
+5. Install Vitest and test the validate function
+6. Install Playwright and test our form including saving to the test database
+
+[Install the MongoDB community edition.](https://www.mongodb.com/try/download/community) 
+
+[Install the MongoDB shell](https://www.mongodb.com/docs/mongodb-shell/install/#procedure) **and use it to create a new database named "my-project".**
+
+Install the [Node native MongoDB client](https://www.mongodb.com/docs/drivers/node/current/get-started/#install-the-node.js-driver), and the [mongodb-memory-server](https://github.com/typegoose/mongodb-memory-server):
+
+```bash
+npm i mongodb && npm i -D mongodb-memory-server
+```
+
+[Install the dotenv package](https://www.npmjs.com/package/dotenv) that let's us use environment variables inside .env file. We use this for our production database connection string, because it will contain credentials that we want to keep secret.
+
+```bash
+npm i dotenv
+```
+
+Load dotenv in the top of the server.ts file, right below the imports:
+
+```js
+import dotenv from "dotenv";
+dotenv.config();
+```
+
+Write the following code inside the already created db.ts file:
+
+```js
+import * as mongoDB from "mongodb";
+import { MongoMemoryServer } from "mongodb-memory-server";
+
+// TypeScript type for form data
+export type BlogPostFormData = {
+  blogId: string;
+  blogTitle: string;
+  blogText: string;
+};
+
+// TypeScript interface for our blog post database entry
+export interface BlogPost {
+  // https://www.mongodb.com/docs/drivers/node/current/typescript/#working-with-the-_id-field
+  _id?: mongoDB.ObjectId;
+  blogTitle: string;
+  blogText: string;
+}
+
+// clean way to have types for our database collections
+export const collections: {
+  // https://www.mongodb.com/docs/drivers/node/current/typescript/#working-with-the-_id-field
+  blogPosts?: mongoDB.Collection<mongoDB.OptionalId<BlogPost>>;
+} = {};
+
+// we initialise the db and decide if we are testing
+export async function connectToDatabase(isTesting: boolean) {
+  // this is the connection string to connect to our database
+  let connectionString;
+  // if testing we use mongodb-memory-server
+  if (isTesting) {
+    const mongod = await MongoMemoryServer.create({
+      instance: {
+        dbName: "my-project",
+      },
+    });
+    connectionString = mongod.getUri();
+  } else {
+    // else we use a real database
+    connectionString = process.env.MONGODB_CONNECTION_STRING as string;
+  }
+  // we initialise the client
+  const client: mongoDB.MongoClient = new mongoDB.MongoClient(connectionString);
+  // and connect to the database server
+  await client.connect();
+  // we assign our database to a variable
+  const db: mongoDB.Db = client.db("my-project");
+  // and our blog post collection to another variable
+  const blogCollection = db.collection<mongoDB.OptionalId<BlogPost>>("posts");
+  // then assign it to our collections object
+  collections.blogPosts = blogCollection;
+  // logging that we are up and running
+  console.log(
+    "succefully connected to database with mongoDB client and app collections..."
+  );
+}
+```
+
+Let's move on and create two files, one to hold the Express route logic for our dashboard page, and one for our validation logic to validate our blog post form data.
+
+- Create dashboardController.ts inside your /src/backend/controllers directory
+- Create validate.ts inside your /src/backend directory
+
+The file tree should look like this:
+```bash
+src/backend/
+├── controllers
+│   └── dashboardController.ts <- newly created
+├── db.ts
+└── validate.ts <- newly created
+```
+
+Put this code inside validate.ts:
+```js
+import type { BlogPostFormData } from "./db";
+
+// simple validation function just to have something to test
+export function validateBlogPostFormData(formData: BlogPostFormData) {
+  const blogTitle = formData.blogTitle;
+  const blogText = formData.blogText;
+  // we validate if blog title and blog text are strings with >0 characters
+  if (typeof blogTitle === "string" || typeof blogText === "string") {
+    if (blogTitle.length > 0 && blogText.length > 0) {
+      return true;
+    }
+  }
+  // otherwise the validation fails
+  return false;
+}
+```
+
+And this code inside the dashboardController.ts:
+```js
+import type { Request, Response } from "express";
+import { collections } from "../db";
+import type { BlogPostFormData } from "../db";
+import { validateBlogPostFormData } from "../validate";
+
+// simple async function to load into our express route
+export async function dashboard(req: Request, res: Response) {
+  // we extract the form data from the request
+  const formData: BlogPostFormData = req.body;
+  // validate form data
+  if (!validateBlogPostFormData(formData)) {
+    // send error message for invalid form data
+    return res.status(400).send("Bad Request");
+  }
+  try {
+    // try save to the database
+    await collections.blogPosts?.insertOne(formData);
+    // send success message
+    res.sendStatus(200);
+  } catch (error) {
+    // send error message for unknown error
+    res.status(500).send("Internal Server Error");
+  }
+}
+```
+
+Now we can add the database connection and the Express route logic to our server.ts file.
+```js
+async function main() { // old code 
+  await connectToDatabase(process.env.NODE_ENV === "test");
+
+  const app = express(); // old code
+  app.post("/dashboard", dashboard);
+```
+
+### That's enough to start writing some tests:
+
 coming soon...

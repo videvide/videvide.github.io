@@ -360,7 +360,7 @@ main().catch((error) => console.log(error));
 
 In order to have the benefits of Vite in our development process, we need to set it up as a Express middleware and tell it to serve our frontend code as a SPA. 
 
-We need to distinguish between dev mode and production mode, and the easiest way to do that is to set an environment variable.
+We need to distinguish between dev mode and production mode, and the easiest way to do that is to set an environment variable in our package.json scripts.
 
 There is a great package we can use to achieve this rather hassle free: [cross-env](https://www.npmjs.com/package/cross-env). This package can be used on macOS, Windows, and Linux.
 
@@ -368,11 +368,9 @@ There is a great package we can use to achieve this rather hassle free: [cross-e
 npm i cross-env
 ```
 
-It's ready to be used in our code like so, and this gives us the ability to tell the code if it is in production mode or not, deciding if we should run Vite as an Express middleware:
-```js
-const isProduction = process.env.NODE_ENV === 'production'
-```
+It's ready to be used in our production script later on, for now we do not need to worry about it, because the absence of the environment variable is equal to false.
 
+#### Continuing with Vite: 
 When we run Vite as a middleware, Vite also want to know where to find our index.html, but Vite will look for index.html by default so we do not need to specify the exact file to find, as we did above with pure a Express server, only the directory where it is.
 
 Now we need to change the rest of our server.ts file. 

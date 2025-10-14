@@ -651,8 +651,10 @@ blogForm.addEventListener("submit", async (e) => {
       // then parse our data into json
       body: JSON.stringify(formData),
     });
-    // we read the response from the server
-    // ... 
+    // read response status, and alert success message if blog post created
+    if (response.status === 200) {
+      alert("Blog post created!");
+    }
     // then remove value from form input fields
     blogTitle.value = "";
     blogText.value = "";
@@ -704,7 +706,9 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 
 // TypeScript type for form data
 export type BlogPostFormData = {
-  blogId: string;
+  // we get back to this property later, when we call objects from the database
+  // but for now, in our forms, it does not matter, I just want to prepare you
+  blogId?: string;
   blogTitle: string;
   blogText: string;
 };
@@ -712,6 +716,7 @@ export type BlogPostFormData = {
 // TypeScript interface for our blog post database entry
 export interface BlogPost {
   // https://www.mongodb.com/docs/drivers/node/current/typescript/#working-with-the-_id-field
+  // we have it here to give our database collection the entire object including id property
   _id?: mongoDB.ObjectId;
   blogTitle: string;
   blogText: string;
@@ -797,7 +802,8 @@ import type { BlogPostFormData } from "../db";
 import { validateBlogPostFormData } from "../validate";
 
 // simple async function to load into our express route
-export async function dashboard(req: Request, res: Response) {
+// since we export it as default, we import it like so: dashboardController
+export default async function(req: Request, res: Response) {
   // we extract the form data from the request
   const formData: BlogPostFormData = req.body;
   // validate form data
@@ -817,15 +823,235 @@ export async function dashboard(req: Request, res: Response) {
 }
 ```
 
-Now we can add the database connection and the Express route logic to our server.ts file.
+Now we can edit the server.ts file. Add the database connection to the top of the ```main()``` function, and import and add the Express route logic for our dashboardController below the express initialization.
 ```js
-async function main() { // old code 
-  await connectToDatabase(process.env.NODE_ENV === "test");
+await connectToDatabase(process.env.NODE_ENV === "test");
+```
+```js
+app.post("/dashboard", dashboardController);
+```
 
-  const app = express(); // old code
-  app.post("/dashboard", dashboard);
+Add the page logic to dashboard.ts inside the ```logic()``` function:
+```js
+// this gets the form element 
+const blogForm = document.getElementById("blog-form") as HTMLFormElement;
+// this gets the input element for blog title
+const blogTitle = document.getElementById(
+  "blog-title"
+) as HTMLInputElement;
+// this gets the input element for blog text
+const blogText = document.getElementById("blog-text") as HTMLInputElement;
+// we add an event listener to the form for submit actions, i.e. pressing submit button
+blogForm.addEventListener("submit", async (e) => {
+  // and prevent form submission
+  e.preventDefault();
+  // place form data into an object
+  const formData: BlogPostFormData = {
+    blogTitle: blogTitle.value,
+    blogText: blogText.value,
+  };
+  try {
+    // then send it to our backend
+    const response = await fetch("http://localhost:3000/dashboard", {
+      method: "post",
+      headers: {
+        "content-type": "application/json",
+      },
+      // we conver the data into json 
+      body: JSON.stringify(formData),
+    });
+    // if blog post created log success message
+    if (response.status === 200) {
+      console.log("Blog post created!");
+    }
+    // remove values from form inputs to have a clean page
+    blogTitle.value = "";
+    blogText.value = "";
+  } catch (error) {
+    console.log(error);
+  }
+});
+```
+
+We just have to add one more thing, in order for our backend to receive the data we send from our frontend, we need to use a middleware that handles json data. 
+
+Place this line of code below your express initialization:
+```js
+app.use(express.json());
 ```
 
 ### That's enough to start writing some tests:
+
+We use [Vitest](https://vitest.dev/guide/#adding-vitest-to-your-project) to [unit test](https://en.wikipedia.org/wiki/Unit_testing), and [Playwright](https://playwright.dev/docs/intro#installing-playwright) to [end-to-end test](https://microsoft.github.io/code-with-engineering-playbook/automated-testing/e2e-testing/).
+
+To keep good organisation of our project we create a directory that will hold all our tests. We also want to differantiate between unit tests and e2e (end-to-end) tests. 
+
+First create a common test directory in our **project root** called "tests". Then inside this directory we create two seperate directories: ```unit``` and ```e2e```:
+
+```bash
+tests
+├── e2e
+└── unit
+```
+
+Install the required packages:
+```bash
+npm i -D vitest && npm init playwright@latest
+```
+
+Choose the following for the Playwright installation:
+```bash
+✔ Where to put your end-to-end tests? · tests/e2e
+✔ Add a GitHub Actions workflow? (Y/n) · false
+✔ Install Playwright browsers? (Y/n) · true
+```
+
+Remove the default generated test file ```example.spec.ts``` inside the tests/e2e directory, we soon write our own tests.
+
+Playwright installed a configuration file in our root directory:
+```bash
+├── playwright.config.ts
+```
+
+Because Playwright tests are end-to-end we need to have a web server running. We can configure this inside the configuration file by removing the comments around the web server configuration option at the bottom of the page:
+```js
+/* Run your local dev server before starting the tests */
+  webServer: {
+    command: 'npm run start',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+  },
+```
+
+And because we plan to use mongodb-memory-server while testing we need to write a custom package.json script to give the Playwright web server. This script should start our ordinary dev server but with ```NODE_ENV=test```.
+
+Add the script to package.json, we use cross-env to play it safe:
+```js
+"playwrightServer": "cross-env NODE_ENV=test tsx server.ts"
+```
+
+Then change the webServer command:
+```js
+command: 'npm run playwrightServer',
+```
+
+Whenever we run our Playwright tests it will start its internal web server using our command, setting the ```NODE_ENV=test```, and use mongodb-memory-server.
+
+Make a package.json script to run Playwright tests:
+```js
+"test:e2e": "npx playwright test"
+```
+
+You can read more about Playwright and how to write tests [here](https://playwright.dev/docs/writing-tests). 
+
+Moving on to Vitest:
+
+Since we use a single tests directory with two seperate sub directories we need to tell Vitest what tests to run, otherwise it will try run all tests, including our Playwright tests.
+
+To tell Vitest what files to run we create a small configuration file: ```vitest.config.ts```.
+
+Inside the configuration file we export our configurations and specify what directories and files to include when running our tests:
+```js
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    // glob pattern matching all .test/.spec JS/TS files 
+    // (js, jsx, ts, tsx) in /tests/unit, with optional c/m module prefix
+    include: ["./tests/unit/*.{test,spec}.?(c|m)[jt]s?(x)"],
+  },
+});
+```
+
+Make a package.json script to run Vitest:
+```js
+"test:unit": "npx vitest"
+```
+
+Running Vitest with default options will place it in watch mode, waiting for file changes. You can look into Vitest and more of its options [here.](https://vitest.dev/guide/#getting-started)
+
+We might want to run our entire test suite, but make sure to set watch mode to false for Vitest, otherwise it will get stuck:
+```js
+"test:all": "vitest --watch=false && npx playwright test"
+```
+
+Create a file ```unit.test.ts``` inside ```/tests/unit```, and test the validation function:
+```js
+import { test, expect } from "vitest";
+import { validateBlogPostFormData } from "../../src/backend/validate";
+
+// this is just a simple example test
+// and the methods are pretty self explanatory
+test("test validate formData is string", () => {
+  expect(
+    validateBlogPostFormData({
+      blogTitle: "asd",
+      blogText: "asd",
+    })
+  ).toBe(true);
+});
+```
+
+Run it:
+```bash
+npm run test:unit
+```
+
+Output:
+```bash
+ ✓ tests/unit/unit.test.ts (1 test) 1ms
+   ✓ test validate formData is string 1ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:41:08
+   Duration  165ms (transform 21ms, setup 0ms, collect 16ms, tests 1ms, environment 0ms, prepare 37ms)
+
+ PASS  Waiting for file changes...
+       press h to show help, press q to quit
+```
+
+Nothing special, we are just getting to know the technology, but in real world applications you probably want to do some more extensive testing.
+
+To write a simple Playwright test, we test if possible to navigate to our dashboard page, submitting the form, and save an item to the database.
+
+If successful we should read "Blog post created!" from the console.
+
+Create a file ```e2e.spec.ts``` inside the ```tests/e2e``` directory, and place this into it:
+
+```js
+import { test, expect } from "@playwright/test";
+
+test("create a blog post", async ({ page }) => {
+  // navigate to correct page
+  await page.goto("http://localhost:3000/dashboard");
+  // fill blog title field
+  await page.getByLabel("Blog Title").fill("Test Blog Title");
+  // fill blog text field
+  await page.getByLabel("Blog Text").fill("Test Blog Text");
+  // expect the console.log success message before we submit form
+  const successMessagePromise = page.waitForEvent("console");
+  // click the submit button
+  await page.getByRole("button", { name: "Create Post" }).click();
+  // load the success message
+  const successMessage = await successMessagePromise;
+  // expect the success message to be correct
+  expect(successMessage.text()).toMatch("Blog post created!");
+});
+```
+
+Running the test should give us this output:
+```bash
+Running 3 tests using 3 workers
+  3 passed (4.5s)
+
+To open last HTML report run:
+
+  npx playwright show-report
+```
+
+Good job!
+
+### Time to build and deploy our project 🚀
 
 coming soon...

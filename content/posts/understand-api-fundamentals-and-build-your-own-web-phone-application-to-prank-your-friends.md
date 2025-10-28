@@ -342,7 +342,7 @@ createForm.addEventListener("submit", async (e) => {
   let email = document.getElementById("email-create").value
   let password = document.getElementById("password-create").value
   // use fetch to call the backend API
-  const res = await fetch("http://localhost:3000/create-user", {
+  const res = await fetch("http://localhost:3000/signup", {
     // make sure method is post 
     method: "post",
     headers: {

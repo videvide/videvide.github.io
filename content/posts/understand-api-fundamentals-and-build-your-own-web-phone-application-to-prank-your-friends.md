@@ -327,7 +327,7 @@ export const userCollection = db.collection("users")
 export const contactCollection = db.collection("contacts")
 ```
 
-Add this to your jwt.js file to handle the JWT logic:
+Add this to your jwt.js file to handle the JWT logic, we are using [this](https://github.com/panva/jose?tab=readme-ov-file#jose) package called Jose:
 ```js
 import * as jose from "jose"
 
@@ -342,6 +342,8 @@ const alg = "HS256"
 // function to generate and return a signed jwt-token with provided data
 export async function generateToken(data) {
   try {
+    // we try hashing our data and signing it with this function:
+    // https://github.com/panva/jose/blob/main/docs/jwt/sign/classes/SignJWT.md
     return await new jose.SignJWT(data)
       .setProtectedHeader({ alg })
       .sign(secret);
@@ -356,6 +358,8 @@ export async function generateToken(data) {
 // function to validate jwt-token
 export async function validateToken(token) {
   try {
+    // we try to validate the provided token with this function:
+    // https://github.com/panva/jose/blob/main/docs/jwt/verify/functions/jwtVerify.md#examples
     const { payload } = await jose.jwtVerify(token, secret);
     return payload;
   } catch (e) {

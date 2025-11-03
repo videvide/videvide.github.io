@@ -157,7 +157,8 @@ Then add some files and directories, your project should look like this:
     ├── index.html
     ├── package.json
     └── src
-        └── main.js
+        ├── main.js
+        └── phone.js
 ```
 
 Make sure to include correct directories, files, and extensions in your .gitignore file.

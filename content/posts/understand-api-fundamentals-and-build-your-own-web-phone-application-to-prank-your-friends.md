@@ -117,9 +117,9 @@ I am on a Mac machine, and your shell code might be different:
 # create the top-level project directory
 mkdir web-phone; cd web-phone;
 # create the api project and set type=module, then change directory to top-level one
-mkdir backend; cd backend; npm init -y > /dev/null 2>&1; npm pkg set type=module; cd ..
+mkdir backend; cd backend; npm init -y; npm pkg set type=module; cd ..
 # do the same for the frontend
-mkdir frontend; cd frontend; npm init -y > /dev/null 2>&1; npm pkg set type=module; cd ..
+mkdir frontend; cd frontend; npm init -y; npm pkg set type=module; cd ..
 ```
 
 Your project should look like this:
@@ -143,7 +143,8 @@ Then add some files and directories, your project should look like this:
 ├── .gitignore
 ├── backend
 │   ├── controllers
-│   │   ├── phoneBookController.js
+│   │   ├── contactController.js
+│   │   ├── phoneController.js
 │   │   └── userController.js
 │   ├── middlewares
 │   │   └── auth.js
@@ -184,11 +185,6 @@ app.post('/signup', signup)
 // route to login users
 app.post('/login', login)
 
-// route to logout users
-// this is only for future purpose
-// "logout" happens in client with current setup (JWT / localstorage)
-app.post('/logout', logout)
-
 app.listen(port, () => {
   console.log(`API listening on port ${port}`)
 })
@@ -200,29 +196,92 @@ Each route is using a function imported from the userController.js module, let's
 import { userCollection } from "../services/db.js"
 import { generateToken } from "../services/jwt.js"
 
-// function to create a user 
-export async function createUser (req, res) {
-    // extract the data from the request
-    const formData = req.body
-    // store it in variables for easier handling
-    const email = formData.email
-    const password = formData.password
-    // try save a user to the database
-    try {
-        await userCollection.insertOne({
-            email: email,
-            password: password
+// function to check if email is available
+async function emailAvailable(email) {
+  let user;
+  try {
+    // try fetching user from our database
+    user = await userCollection.findOne({ email: email });
+  } catch (e) {
+    console.error(e);
+    // if something unexpected happens, throw error
+    throw new Error("Database error!");
+  }
+  if (user) {
+    // if user exists, return false
+    return false;
+  } else {
+    // else return true
+    return true;
+  }
+}
+
+// function to signup a user 
+export async function signup(req, res) {
+  // extract the data from the request
+  const formData = req.body;
+  try {
+    // check if email is available
+    if (await emailAvailable(formData.email)) {
+      // then create the new user 
+      // we do not use any password encryption for now
+      await userCollection.insertOne({
+        email: formData.email,
+        password: formData.password,
+      });
+      // return a response with a genereated token
+      // we will create the token logic in a while
+      return res.status(200).send(
+        await generateToken({
+          email: formData.email,
         })
-    } 
-    // catch any errors 
-    catch (e) {
-        console.log(e)
+      );
+    } else {
+      // respond with error message if email is taken
+      return res.status(400).send("Email already taken!");
     }
-    // return a response with the generated token
-    return res.send(generateToken({
-        email: email,
-        role: "user"
-    }))
+  } catch (e) {
+    console.error(e);
+    // if everything fails return error message
+    return res.status(500).send("Internal Server Error");
+  }
+}
+
+// function to login a user 
+export async function login(req, res) {
+  // check if user already logged in
+  if (req.headers.authorization) {
+    // just return without doing anything
+    return;
+  }
+  // extract form data
+  const formData = req.body;
+  try {
+    // try find the user in our database
+    const user = await userCollection.findOne({
+      email: formData.email,
+      password: formData.password,
+    });
+    if (user) {
+      // if user then try return a token
+      try {
+        return res
+          .status(200)
+          .send(await generateToken({ email: formData.email }));
+      } catch (e) {
+        // else send error message 
+        console.error(e);
+        return res.status(500).send("Internal error, try again!");
+      }
+    } else {
+      // if no user return error message
+      return res.status(400).send("Invalid credentials!");
+    }
+  } catch (e) {
+    console.error(e);
+    // if everything fails return error message
+    return res.status(500).send("Internal Server Error");
+  }
 }
 ```
 
@@ -263,6 +322,8 @@ await client.connect()
 const db = client.db(dbName)
 // export the user collection we need to perform CRUD
 export const userCollection = db.collection("users")
+// export the contacts collection we need to perform CRUD
+export const contactCollection = db.collection("contacts")
 ```
 
 Add this to your jwt.js file to handle the JWT logic:
@@ -279,23 +340,29 @@ const alg = "HS256"
 
 // function to generate and return a signed jwt-token with provided data
 export async function generateToken(data) {
-  return await new jose.SignJWT(data)
-  .setProtectedHeader({ alg })
-  .sign(secret)
+  try {
+    return await new jose.SignJWT(data)
+      .setProtectedHeader({ alg })
+      .sign(secret);
+  } catch (e) {
+    console.error(e);
+    throw new Error(
+      `Failed to generate token with data: ${data} and error message: ${e}`
+    );
+  }
 }
 
 // function to validate jwt-token
 export async function validateToken(token) {
   try {
-    // try to validate
-    const { payload } = await jose.jwtVerify(token, secret)
-    // return the valid data, same as saved from form
-    return payload
+    const { payload } = await jose.jwtVerify(token, secret);
+    return payload;
   } catch (e) {
-    // log error 
-    console.log(error)
+    console.error(e);
+    throw new Error(`Failed to verify token: ${e}`);
   }
 }
+
 ```
 
 ## Writing the first lines of frontend code:
@@ -303,7 +370,7 @@ export async function validateToken(token) {
 Add this to your index.html file. It will create a simple form to take in user data to register a user. We will later write the JavaScript logic to handle the form submission, sending the data to the backend API.
 
 ```html
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -312,58 +379,138 @@ Add this to your index.html file. It will create a simple form to take in user d
     <title>client</title>
   </head>
   <body>
-    <div>
-    <h1>Create User</h1>
-    <form action="post" id="create-form">
-        <label for="email-create">Email</label>
-        <input type="email" name="email-create" id="email-create">
-        <label for="password-create">Password</label>
-        <input type="password" name="password-create" id="password-create">
-        <input type="submit" value="Create User">
-    </form>
+    <div id="app">
+      <div id="signup-form-div"></div>
+      <div id="login-form-div"></div>
+      <div id="logout-button-div"></div>
+      <div id="phone-page-div">
+        <h1>Phone page</h1>
+        <div id="contact-form-div"></div>
+        <h3>My contacts:</h3>
+        <div id="contacts-div"></div>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/phone.js"></script>
   </body>
 </html>
-
 ```
 
 Now add this to your main.js file to handle form submission: 
 ```js 
-// get the form element
-const createForm = document.getElementById("create-form")
-const loginForm = document.getElementById("login-form")
+// try get token from local storage
+const token = localStorage.getItem("token");
+// if not any token
+if (!token) {
+  // setup signup form
+  const signupFormDiv = document.getElementById("signup-form-div");
+  signupFormDiv.innerHTML = `
+  <h1>Sign Up</h1>
+  <form action="post" id="signup-form">
+    <label for="signup-email">Email</label>
+    <input type="email" name="signup-email" id="signup-email" />
+    <label for="signup-password">Password</label>
+    <input type="password" name="signup-password" id="signup-password" />
+    <input type="submit" value="Sign Up" />
+  </form>
+  <br />
+  <hr />
+  `;
+  const signupForm = document.getElementById("signup-form");
+  // attach event listener for form submission
+  signupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    let email = document.getElementById("signup-email").value;
+    let password = document.getElementById("signup-password").value;
+    // send signup request to server
+    const res = await fetch("http://localhost:3000/signup", {
+      method: "post",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email,
+        password: password,
+      }),
+    });
+    if (res.status === 200) {
+      // if successful we store token in localstorage
+      const token = await res.text();
+      localStorage.setItem("token", token);
+      // and reload page
+      location.reload();
+    } else {
+      // else we display error message
+      alert(await res.text());
+      // and also reload the page
+      location.reload();
+    }
+  });
 
-// add eent listener that listens to form submission
-createForm.addEventListener("submit", async (e) => {
-  // prevent default form submission behavior handled by browser
-  e.preventDefault()
-  // get the values from the form fields
-  let email = document.getElementById("email-create").value
-  let password = document.getElementById("password-create").value
-  // use fetch to call the backend API
-  const res = await fetch("http://localhost:3000/signup", {
-    // make sure method is post 
-    method: "post",
-    headers: {
-      // and content type json
-      "content-type": "application/json"
-    },
-    // stringify the form values
-    body: JSON.stringify({
-      "email": email,
-      "password": password
-    })
-  })
-  // the response is our signed JWT token 
-  const token = await res.text()
-  // save it to localstorage to use in following requests 
-  localStorage.setItem("token", token)
-})
+  // setup login form
+  const loginFormDiv = document.getElementById("login-form-div");
+  loginFormDiv.innerHTML = `
+    <h1>Login</h1>
+      <form action="post" id="login-form">
+      <label for="login-email">Email</label>
+      <input type="email" name="login-email" id="login-email" />
+      <label for="login-password">Password</label>
+      <input type="password" name="login-password" id="login-password" />
+      <input type="submit" value="Login" />
+    </form>
+    <br />
+    <hr />
+  `;
+  const loginForm = document.getElementById("login-form");
+  // attach event listener for form submission
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    let email = document.getElementById("login-email").value;
+    let password = document.getElementById("login-password").value;
+    // send login request to server
+    const res = await fetch("http://localhost:3000/login", {
+      method: "post",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email,
+        password: password,
+      }),
+    });
+    if (res.status === 200) {
+      // if successful we store token in localstorage
+      const token = await res.text();
+      localStorage.setItem("token", token);
+      // and reload the page
+      location.reload();
+    } else {
+      // else we display error message
+      alert(await res.text());
+      // and also reload the page
+      location.reload();
+    }
+  });
+} else {
+  // if user is already logged in, we display the logout button
+  const logoutButtonDiv = document.getElementById("logout-button-div");
+  logoutButtonDiv.innerHTML = `
+    <button type="button" id="logout-button" >Logout</button>
+  `;
+  const logoutButton = document.getElementById("logout-button");
+  // add an event listener for click events
+  logoutButton.addEventListener("click", (e) => {
+    // and remove token from localstorage, i.e. logging user out
+    localStorage.removeItem("token");
+    // then reload the page
+    location.reload();
+  });
+}
+
 ```
 
-There is the first basic (and very insecure) approach to our user authentication. Next we add the logic to login and logout our user, as well as the CRUD operations for our phone book functionality. Later we add the phone functions, including calling and sending SMS. 
+There is the first basic (and very insecure) approach to our user authentication. Next we add the CRUD operations for our phone book functionality. Later we add the phone functions, including calling and sending SMS. 
 
-## Writing further authentication logic:
+## Adding phone book CRUD:
 
 coming soon...

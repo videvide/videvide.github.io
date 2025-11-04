@@ -158,6 +158,7 @@ Then add some files and directories, your project should look like this:
     ├── package.json
     └── src
         ├── main.js
+        ├── contact.js
         └── phone.js
 ```
 
@@ -172,7 +173,7 @@ Write this code into your server.js file:
 import express from "express"
 import cors from "cors"
 // we import functions from this module that we soon will write
-import {signup, login, logout} from "./controllers/userController.js"
+import {signup, login} from "./controllers/userController.js"
 
 const port = 3000
 const app = express()
@@ -234,6 +235,7 @@ export async function signup(req, res) {
       // we will create the token logic in a while
       return res.status(200).send(
         await generateToken({
+          _id: createdUser.insertedId.toString(),
           email: formData.email,
         })
       );
@@ -266,9 +268,12 @@ export async function login(req, res) {
     if (user) {
       // if user then try return a token
       try {
-        return res
-          .status(200)
-          .send(await generateToken({ email: formData.email }));
+        return res.status(200).send(
+          await generateToken({
+            _id: user._id.toString(),
+            email: formData.email,
+          })
+        );
       } catch (e) {
         // else send error message 
         console.error(e);
@@ -340,6 +345,7 @@ const secret = new TextEncoder().encode(
 const alg = "HS256"
 
 // function to generate and return a signed jwt-token with provided data
+// the provided data in our case is the user _id and email
 export async function generateToken(data) {
   try {
     // we try hashing our data and signing it with this function:
@@ -513,9 +519,403 @@ if (!token) {
 }
 
 ```
+There is our basic (and very insecure) approach to user authentication.
 
-There is the first basic (and very insecure) approach to our user authentication. Next we add the CRUD operations for our phone book functionality. Later we add the phone functions, including calling and sending SMS. 
+Before we move on, we want to create a [express middleware](https://expressjs.com/en/guide/writing-middleware.html) that we use to both authenticate a user, and at the same time extract the user object from the database. This way we are able to pass that user object around between our soon to be CRUD functions.
 
-## Adding phone book CRUD:
+In our server.js file we add the following code snippet, just before our routes:
+```js
+// this is the standard way of writing express middleware that we can add to our routes
+// as you can tell, we pass the same arguments as to our routes, with an additional one: "next"
+// the "next" argument is the next function to be called in the request-response cycle
+// "passing on" whatever we want to program in this function, our middleware
+async function auth(req, res, next) {
+  // check if authorization header is available
+  if (!req.headers.authorization) {
+    // return error message if not
+    return res.status(400).send("Missing Authentication Header!");
+  }
+  // initiate empty user variable
+  let user;
+  try {
+    // try to extract the user data from our token 
+    user = await validateToken(req.headers.authorization);
+  } catch (e) {
+    // send error message if it fails
+    return res.status(400).send("Invalid Authorization Token!");
+  }
+  try {
+    // then try to fetch the corresponding user object from our database
+    user = await userCollection.findOne({
+      _id: new ObjectId(user._id),
+      email: user.email,
+    });
+  } catch (e) {
+    // else log the error and send a error message
+    console.error(e)
+    return res.status(500).send("Internal Server Error!");
+  }
+  // this is where we attach our user object to the current request 
+  // before we pass it on to the next function in the request-response cycle
+  // this allows us to fetch it with "req.user" in our routes
+  req.user = user;
+  // pass it on
+  next();
+}
+```
+
+Now we are done with our simple authentication logic. Next we add the CRUD operations for our phone book contacts functionality. Later we add the phone functions, including calling and sending SMS. 
+
+## Adding contacts CRUD:
+
+Now we add the CRUD logic to our project. We start with adding our express routes, take notice to our newly created middleware inside each contacts route. 
+
+In our server.js file we add the following code using the REST approach, i.e. different routes, and with different HTTP methods to represent the different actions to take:
+```js
+// we will write these functions in the next step
+import {
+  contacts,
+  createContact,
+  deleteContact,
+  getContact,
+  editContact,
+} from "./controllers/contactController.js";
+
+// route to get all contacts for logged in user
+app.get("/contacts", auth, contacts);
+// get specific contact for logged in user
+app.get("/contacts/:id", auth, getContact);
+// create contact for logged in user
+app.post("/contacts/create", auth, createContact);
+// update contact for logged in user
+app.put("/contacts/edit/:id", auth, editContact);
+// delete contact for logged in user
+app.delete("/contacts/delete/:id", auth, deleteContact);
+```
+
+Then write the logic inside our contactController.js file. We write all the logic to handle our CRUD operations, including "C"reating, "R"eading, "U"pdating, and "D"eleting a contact object to and from our database:
+```js
+// import the ObjectId object from mongodb
+// we use this to convert strings to correct format for our database
+import { ObjectId } from "mongodb";
+// import our contact collection
+import { contactCollection } from "../services/db.js";
+
+// function to get all contacts for logged in user
+export async function contacts(req, res) {
+  try {
+    // fetch all the users contacts from database
+    const userContacts = await contactCollection
+      // notice that we use the ObjectId
+      // and notice that we use our user object from the request 
+      // that we made happen in our middleware
+      .find({ userId: new ObjectId(req.user._id) })
+      // and that we convert the returned "Cursor" object to a JavaScript array
+      .toArray();
+    if (userContacts) {
+      // if there is contacts we return them to client
+      return res.send(userContacts);
+    } else {
+      // if not send empty response
+      return res.status(204).send();
+    }
+  } catch (e) {
+    // otherwise log any error and return error message
+    console.error(e);
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+
+// function to get specific contact for logged in user
+export async function getContact(req, res) {
+  try {
+    // try fetch the contact from db and send to client
+    const contact = contactCollection.find({
+      userId: new ObjectId(req.user._id),
+      _id: ObjectId(req.params),
+    });
+    // return the contact 
+    return res.status(200).send(contact);
+  } catch (e) {
+    // send error message if fails
+    console.error(e);
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+// function to create contact for logged in user
+export async function createContact(req, res) {
+  try {
+    // try insert a new contact entry to database with our received form data
+    const formData = req.body;
+    await contactCollection.insertOne({
+      name: formData.name,
+      number: formData.number,
+      // we connect the contact with our user using the user._id
+      // this way we can filter our database queries on the user._id
+      userId: new ObjectId(req.user._id),
+    });
+    // return successful response
+    return res.status(201).send();
+  } catch (e) {
+    // else log error and return error message
+    console.error(e);
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+// function to update contact for logged in user
+export async function editContact(req, res) {
+  try {
+    // extract received form data
+    const formData = req.body;
+    // update the specific contac using mongodb update filter and document: 
+    // https://www.mongodb.com/docs/drivers/node/current/crud/update/modify/#example
+    await contactCollection.updateOne(
+      // first argument is our filter object
+      { _id: new ObjectId(req.params), userId: new ObjectId(req.user._id) },
+      // second is our $set object with the data to change
+      {
+        $set: {
+          name: formData.name,
+          number: formData.number,
+        },
+      }
+    );
+    // return successful response
+    return res.status(201).send();
+  } catch (e) {
+    // else log error and return error message
+    console.error(e);
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+// function to delete contact for logged in user
+export async function deleteContact(req, res) {
+  try {
+    // delete the specific contact
+    await contactCollection.deleteOne({
+      _id: new ObjectId(req.params),
+      userId: new ObjectId(req.user._id),
+    });
+    // return successful response
+    return res.status(204).send();
+  } catch (e) {
+    // else log error and return error message
+    console.error(e);
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+
+```
+
+Finally we add the client logic to our contact.js file:
+```js
+// check if user is logged in
+const token = localStorage.getItem("token");
+// if user logged in show the contact forms and contact list
+if (token) {
+  // fetch the outer div to insert our form into
+  const contactFormDiv = document.getElementById("contact-form-div");
+  // create and insert the form to create contacts
+  contactFormDiv.innerHTML = `
+  <form action="post" id="create-contact-form">
+    <h3>Create Contact:</h3>
+    <label for="create-contact-name">Contact Name</label>
+    <input type="text" name="create-contact-name" id="create-contact-name">
+    <label for="create-contact-number">Contact Number</label>
+    <input type="text" name="create-contact-number" id="create-contact-number">
+    <input type="submit" value="Save Contact">
+  </form>
+  `;
+  // fetch the newly created form
+  const createContactForm = document.getElementById("create-contact-form");
+  // add event listener and listen to form submission
+  createContactForm.addEventListener("submit", async (e) => {
+    // prevent default form behaviour
+    e.preventDefault();
+    // fetch the contact name
+    const createContactName = document.getElementById(
+      "create-contact-name"
+    ).value;
+    // fetch the contact number
+    const createContactNumber = document.getElementById(
+      "create-contact-number"
+    ).value;
+    // send a request to the API including our token and correct HTTP method
+    const createResponse = await fetch(
+      "http://localhost:3000/contacts/create",
+      {
+        // to create we use the "post" method
+        method: "post",
+        headers: {
+          // this is where we add our token 
+          Authorization: token,
+          "content-type": "application/json",
+        },
+        // convert the form input values to json
+        body: JSON.stringify({
+          name: createContactName,
+          number: createContactNumber,
+        }),
+      }
+    );
+    if (createResponse.status === 201) {
+      // if the response is successful we display a success message 
+      alert("Contact created!");
+      // and reload the page
+      location.reload();
+    } else if (createResponse.status === 500) {
+      // else display error message
+      alert("Something's wrong, try again!");
+    }
+  });
+
+  // this is our logic to fetch all contacts and display them
+  // fetch the outer div to place the contact elements inside
+  const contactsDiv = document.getElementById("contacts-div");
+  // make a request to the API including token and correct HTTP method
+  const res = await fetch("http://localhost:3000/contacts", {
+    // we use tht "get" method when we only fetch data
+    method: "get",
+    headers: {
+      // we still need the token to only fetch the current users data
+      Authorization: token,
+    },
+  });
+  // if successful
+  if (res.status === 200) {
+    // if the request is successful we extract the received data to JavaScript
+    const contacts = await res.json();
+    // we check if there is any contact objects available
+    if (contacts) {
+      // then loop over the objects and apply them to individual elements 
+      // elements including edit and delete buttons
+      contactsDiv.innerHTML += contacts.map(
+        (contact) =>
+          `
+          <div class="contact-card">
+            <p class="contact-card-name">
+              Name: <input type="text" id="contact-edit-name-input-${contact._id}" value="${contact.name}">
+            </p>
+            <p class="contact-card-number">
+              Number: <input type="text" id="contact-edit-number-input-${contact._id}" value="${contact.number}">
+            </p>
+            <button class="contact-edit-button" data-contact-id="${contact._id}">Edit</button>
+            <button class="contact-delete-button" data-contact-id=${contact._id}>Delete</button>
+          </div>
+        `
+      );
+    }
+    // we then add contact edit and delete logic, first the edit logic
+    // we fetch all edit buttons 
+    const contactEditButtons = document.querySelectorAll(
+      ".contact-edit-button"
+    );
+    // then we add event listeners to each one
+    contactEditButtons.forEach((button) => {
+      // we listen for the click event 
+      button.addEventListener("click", async (event) => {
+        // prevent the default behaviour
+        event.preventDefault();
+        // then fetch the contact id from the buttons data attribute
+        // https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/Use_data_attributes
+        const contactId = button.dataset.contactId;
+        // fetch edit form inputs for name
+        const contactEditNameInput = document.getElementById(
+          `contact-edit-name-input-${contactId}`
+        );
+        // and for number
+        const contactEditNumberInput = document.getElementById(
+          `contact-edit-number-input-${contactId}`
+        );
+        // make request to the edit route with token and correct HTTP method
+        console.log(`http://localhost:3000/contacts/edit/${contactId}`);
+        const res = await fetch(
+          // we provide the contact id to the route
+          `http://localhost:3000/contacts/edit/${contactId}`,
+          {
+            // we use the "put" method when editing an object
+            method: "put",
+            headers: {
+              // include token
+              Authorization: token,
+              "content-type": "application/json",
+            },
+            // and convert data to json
+            body: JSON.stringify({
+              name: contactEditNameInput.value,
+              number: contactEditNumberInput.value,
+            }),
+          }
+        );
+        if (res.status === 201) {
+          // if successful we display success message
+          alert("Contact edited!");
+          // and reload the page
+          location.reload();
+        } else {
+          // else error message
+          alert(res.text());
+          // and reload the page
+          location.reload();
+        }
+      });
+    });
+    // delete logic: almost same as edit
+    // we fetch all delete buttons 
+    const contactDeleteButtons = document.querySelectorAll(
+      ".contact-delete-button"
+    );
+    // add event listeners 
+    contactDeleteButtons.forEach((button) => {
+      // also listen for click events
+      button.addEventListener("click", async (event) => {
+        // prevent default behaviour
+        event.preventDefault();
+        // extract contact i from button data attribute
+        // https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/Use_data_attributes
+        const contactId = button.dataset.contactId;
+        // send request with token and correct HTTP method
+        const res = await fetch(
+          // also include the contact id 
+          `http://localhost:3000/contacts/delete/${contactId}`,
+          {
+            // this time we use the "delete" HTTP method
+            method: "delete",
+            headers: {
+              Authorization: token,
+              "content-type": "application/json",
+            },
+          }
+        );
+        if (res.status === 204) {
+          // on success we display success message
+          alert("Contact deleted!");
+          location.reload();
+        } else {
+          // else display error message
+          alert(await res.text());
+          location.reload();
+        }
+      });
+    });
+  // if the user does not have any contacts yet, we display a friendly message 
+  } else if (res.status === 204) {
+    contactsDiv.innerHTML = `
+      <p>You have no contacts</p>
+    `;
+  }
+} else {
+  // and if the user is not logged in we display another friendly message 
+  const phonePageContent = document.getElementById("phone-page-div");
+  phonePageContent.innerHTML = `
+    <h1>Login to use the phone book</h1>
+  `;
+}
+
+```
+
+Now you should have a working CRUD application to signup users and allow them to create contacts to their phone book. The next step is to use a third party API to make our phone application handle calls and text messages. 
+
+## Adding phone functionalities:
 
 coming soon...

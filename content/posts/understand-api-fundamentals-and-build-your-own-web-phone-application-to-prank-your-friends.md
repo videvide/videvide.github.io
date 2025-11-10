@@ -918,4 +918,248 @@ Now you should have a working CRUD application to signup users and allow them to
 
 ## Adding phone functionalities:
 
+We begin with adding the functionality to send text messages. To start of, [signup for 46elks ](https://46elks.com/register). After the completed signup, you'll be able to fetch your credentials from the account page.  Inside your backend project, create a .env file and insert your 46elks credentials, we also add our sending name:
+```bash
+# The 46Elks username
+ELKS_USERNAME=Your46ElksUsername
+# The 46Elks password
+ELKS_PASSWORD=Your46ElksPassword
+# The sending name displayed to our receivers
+ELKS_SENDER=WebPhone
+```
+
+Install the dotenv package:
+```bash
+npm i dotenv
+```
+
+And import it at the top of your server.js file, just below the imports:
+```js
+import "dotenv/config";
+```
+
+Create the route for the SMS function inside the server.js file: 
+```js
+// route to send sms to logged in user contact
+app.post("/sms/send", auth, sendSMS);
+```
+
+Now we add the function for sending SMS inside our phoneController.js file. 
+
+We follow the  [46Elks documentation](https://46elks.se/docs/send-sms) (make sure to choose the Node.js example code), with some slight adjustments to use the js module code style and async/await:
+```js
+// import the 46Elks credentials and sender name from our .env file
+const username = process.env.ELKS_USERNAME;
+const password = process.env.ELKS_PASSWORD;
+const sender = process.env.ELKS_SENDER;
+// create a base64 string with the credentials
+const auth = Buffer.from(username + ":" + password).toString("base64");
+
+// function to send SMS to a logged in users contact
+export async function sendSMS(req, res) {
+  // we receive the contact id, and the messge to send from our client
+  const formData = req.body;
+  const contactId = formData.contactId
+  const message = formData.message;
+  // we fetch the contact from our database 
+  const contact = await contactCollection.findOne({
+    _id: new ObjectId(contactId),
+  });
+  // we create the data object to send to 46Elks 
+  let data = {
+    // our sender name
+    from: sender,
+    // the contact number
+    to: contact.number,
+    // the message 
+    message: `Hello ${contact.name}, Here is your message: ${message}`,
+    // you could use dryrun to test the functionality without sending a real SMS
+    // dryrun: "yes",
+  };
+  // create a URL Search Params object with the data
+  // https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams
+  data = new URLSearchParams(data);
+  // then convert it to a string
+  data = data.toString();
+  // we try send the message through the 46Elks API
+  try {
+    // send it to the 46Elks API
+    const response = await fetch("https://api.46elks.com/a1/sms", {
+      method: "post",
+      headers: {
+        // make sure to add the credentials header
+        Authorization: "Basic " + auth,
+      },
+      // and the data to send
+      body: data,
+    });
+    // we check the status code of our repsonse 
+    if (response.status === 200) {
+      // then extract the json object 
+      const responseJSON = await response.json();
+      // in this simple case, we make sure it has one of the following statuses
+      if (
+        responseJSON.status === "created" ||
+        responseJSON.status === "sent" ||
+        responseJSON.status === "delivered"
+      ) {
+        // we add our logged in user id to the response json object 
+        responseJSON.userId = req.user._id;
+        // we also add the contact id to the response json object
+        responseJSON.contactId = contact._id;
+        // then we simply add the response json object to our databse collection
+        await smsCollection.insertOne(responseJSON);
+        // and return a successful status code and message to the client
+        return res.status(200).send("Message sent and saved to history!");
+      } else {
+        // if the repsonse status from 46Elks is non of the above, we log error
+        console.error("46Elks failled to send message: ", responseJSON);
+        // and return a error message to the client
+        res
+          .status(500)
+          .send(
+            "Unable to send the text message, try again or contact support!"
+          );
+      }
+    } else {
+      // if the response itself failed, we log error
+      console.error("Failed to send message: ", response);
+      // and send error message to the client
+      return res.status(500).send("Failed to send message!");
+    }
+  } catch (e) {
+    // If everything fails we log error
+    console.error(e);
+    // and send error message to the client
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+```
+
+Now we add the client code to our frontend project. We want to add a message input, send message button, as well as a list of all sent message to specific contact. 
+
+First we add the message input just below our contact number input: 
+```html
+<p class="contact-sms-message">
+  Message: <textarea id="contact-sms-message-input-${contact._id}"></textarea>
+</p>
+```
+
+Then add the send message button below the edit and delete button:
+```html
+<button class="contact-sms-button" data-contact-id=${contact._id}>Send SMS</button>
+```
+
+We add the element that will contain the list of sent SMS below the send SMS button:
+```html
+<div id="contact-sms-list-div-${contact._id}"></div>
+```
+
+Now we can add the related client JavaScript code to send and display messages.
+
+We add this to our contact.js file to fetch all the send SMS buttons from the DOM and add event listeners:
+```js
+// fetch all send SMS buttons from the DOM
+const smsButtons = document.querySelectorAll(".contact-sms-button");
+// loop over each button
+smsButtons.forEach((button) => {
+  // add event listeners listening for the click event
+  button.addEventListener("click", async (event) => {
+    // prevent any default behaviour
+    event.preventDefault();
+    // fetch the message from the message input field element
+    // notice .value which fetches the actual value from the input element
+    const smsMessage = document.getElementById(
+      `contact-sms-message-input-${button.dataset.contactId}`
+    ).value;
+    // then we send the SMS with a function we create inside our phone.js file
+    await frontendSendSMS(token, button.dataset.contactId, smsMessage);
+  });
+});
+```
+
+Inside our phone.js file we create the frontendSendSMS function, make sure to import this function inside the contact.js file:
+```js
+// frontend function to send SMS
+// we take the current logged in users token, the contact id, and the message
+export async function frontendSendSMS(token, contactId, message) {
+  // we send the data back to our API that will forward it to the 46Elks API
+  const res = await fetch("http://localhost:3000/sms/send", {
+    method: "post",
+    headers: {
+      // we make sure to include our user credentials
+      Authorization: token,
+      // and specify the correct data type
+      "content-type": "application/json",
+    },
+    // we format our data
+    body: JSON.stringify({
+      // including the contact id
+      contactId: contactId,
+      // and message
+      message: message,
+    }),
+  });
+  // if the request is successful
+  if (res.status === 200) {
+    // we display the success message
+    alert(await res.text());
+    // and reload the page
+    location.reload();
+    // history knapp att se skickade sms
+  } else {
+    // otherwise we display the error message
+    alert(await res.text());
+    // and reload the page
+    location.reload();
+  }
+}
+```
+
+Now that we are able to send our messages we want to display them for each contact.
+
+We stay inside our phone.js file and add the following code: 
+```js
+// frontend function to list all sms per logged in user contacts
+// we take the current logged in users token, and the contact id 
+export async function frontendListAllContactSMS(token, contactId) {
+  // fetch the SMS list container element we already created in our contact card
+  const smsDiv = document.getElementById(`contact-sms-list-div-${contactId}`);
+  // then send the request to fetch all the contacts SMS
+  const res = await fetch(`http://localhost:3000/sms/${contactId}`, {
+    method: "get",
+    headers: {
+      Authorization: token,
+    },
+  });
+  // if the response is successful 
+  if (res.status === 200) {
+    // we fetch the response json data
+    const contactSMSList = await res.json();
+    // and map it to the SMS container 
+    smsDiv.innerHTML += contactSMSList.map(
+      (sms) => `
+            <div>
+                ${sms.message}
+            </div>
+        `
+    );
+  } else {
+    // else show a message saying contact does not have any SMS
+    smsDiv.innerHTML = "<p>There is no SMS for this contact</p>";
+  }
+}
+```
+
+We add the function call to our contact.js file, just below the SMS button logic: 
+```js
+// loop over each contact
+contacts.forEach((contact) => {
+  // fetch and list all the contacts SMS 
+  frontendListAllContactSMS(token, contact._id);
+});
+```
+
+## The last thing to add to our project is functionality to make phone calls.
+
 coming soon...

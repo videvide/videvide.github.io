@@ -1162,4 +1162,144 @@ contacts.forEach((contact) => {
 
 ## The last thing to add to our project is functionality to make phone calls.
 
-coming soon...
+We use the [46elks official documentation](https://46elks.com/docs/make-call) available on their website.
+
+The function will call a contact and play a sound as they answer. 
+
+[This is the sound](https://www.youtube.com/watch?v=LvreRLglIBg&list=RDLvreRLglIBg&start_radio=1) we use, it is the Chinese Rap meme song. You could either download it yourself and host it on a vercel application using express to serve the mp3 file, or you could use [this link](https://46elks.vercel.app/mp3). It need to be online for 46elks to be able to use it for the phone call.
+
+We then assign a phone number to our 46elks account to use for our phone calls, you assign phone numbers in your account page, the credit of your account should cover the cost of 30SEK.
+
+Let's create a route in our server.js to make phone calls: 
+```js
+// function to make prank calls to a logged in users contact 
+app.post("/call/prank-call", auth, makePrankCall);
+```
+
+Now we create the controller function in phoneController.js:
+```js
+// express controller function to prank call our friends
+export async function makePrankCall(req, res) {
+  // get formData from request object that contains the contactId
+  const formData = req.body;
+  // fetch contact from database using contactId from formData
+  const contact = await contactCollection.findOne({
+    _id: new ObjectId(formData.contactId),
+  });
+  // create 46elks API data object with info to send to their API
+  // https://46elks.se/docs/make-call
+  let data = {
+    // our newly assigned account number that makes the call
+    // make sure to add your own, this is a dummy number
+    from: "+46700000001",
+    // the contact number that receives the call
+    to: contact.number,
+    // functions to run on accepted call, i.e. someone answered
+    voice_start: JSON.stringify({
+      // set to record the call, and the endpoint to receive the recording
+      // we could host an endpoint on our vercel app, or just fetch it from 46elks
+      // in this example we fetch it from 46elks after it is made
+      recordcall: "https://46elks.vercel.app/recordings",
+      // set to play audio, stored at specified location (our vercel app)
+      play: "https://46elks.vercel.app/mp3",
+    }),
+  };
+  // format data object into URL search params, to send to 46elks API
+  data = new URLSearchParams(data);
+  // also convert into a string
+  data = data.toString();
+  // we then try send the request to 46elks API
+  try {
+    const response = await fetch("https://api.46elks.com/a1/calls", {
+      // with the HTTP POST method
+      method: "post",
+      // including our API credentials
+      headers: {
+        // we created them at the top of the file in a earlier step
+        Authorization: "Basic " + auth,
+      },
+      // add the formatted data object
+      body: data,
+    });
+    // extract the fetch response json object
+    const responseJSON = await response.json();
+    // validate that our response was successful
+    // the different cases are available in their API examples
+    if (responseJSON.state === "ongoing") {
+      // we then return a success message to the client
+      return res
+        .status(200)
+        .send("You have successfully prank called your contact!");
+    } else {
+      // otherwise log the response for troubleshooting
+      console.error(responseJSON);
+      // and return a error message to the client
+      return res.status(500).send("Prank call unsuccessful, try again!");
+    }
+  } catch (e) {
+    // if any other errors, we log them and return a error message to the client
+    console.error(e);
+    return res.status(500).send("Internal Server Error!");
+  }
+}
+```
+
+### Now we create the client code for our phone call function
+
+We need to add a button to each contact card, and attach a event listener to each one of them, and on the click event we send a request to our backend with the contact id.
+
+Add the button element to the contact card HTML code:
+```html
+<button class="contact-prank-call-button" data-contact-id=${contact._id}>Prank Call</button>
+```
+
+Fetch all buttons, loop over them, and add event listeners:
+```js
+// fetch all the buttons from the DOM using the class attribute
+const prankCallButtons = document.querySelectorAll(
+  ".contact-prank-call-button"
+);
+// use the forEach method to loop over each button
+prankCallButtons.forEach((button) => {
+  // add the event listener, and listen for the click event
+  button.addEventListener("click", async (event) => {
+    // prevent any default behaviour
+    event.preventDefault();
+    // then make a call to our soon to be frontend function to initiate calls
+    // we pass it the token for our logged in user, and the contact id
+    await frontendPrankCall(token, button.dataset.contactId);
+  });
+});
+```
+
+Frontend function to initiate phone calls:
+```js
+// frontend function to initiate prank call
+// it takes the token for our logged in user, and the contact id
+export async function frontendPrankCall(token, contactId) {
+  // make a fetch call to our backend endpoint
+  const res = await fetch("http://localhost:3000/call/prank-call", {
+    // using the HTTP POST method
+    method: "post",
+    headers: {
+      // add our logged in user token
+      Authorization: token,
+      // set the content type to json
+      "content-type": "application/json",
+    },
+    // format the contact id into json object 
+    body: JSON.stringify({
+      contactId: contactId,
+    }),
+  });
+  // either case, we want to display the message
+  alert(await res.text());
+  // and reload the page
+  location.reload();
+}
+```
+
+First try the function to call your own phone, if it works you should hear the song playing, and you should after the call be able to find the recording at your 46elks account under the logs section.
+
+If everything works out, it is time to prank your friends!🤪
+

@@ -1052,6 +1052,424 @@ To open last HTML report run:
 
 Good job!
 
-### Time to build and deploy our project 🚀
+## Now we finish the project
 
-coming soon...
+We will add the necessary code to build our project and make it ready for deployment. We then add code to perform CRUD operations on our blog posts. We begin update the backend logic, then update the frontend code.
+
+Inside the scripts section, inside your package.json file, add the following scripts:
+```js
+// this is used to initiate the build step
+// it calls the two following specific build scripts 
+"build": "npm run build:client && npm run build:server",
+// this is the specific build step for the client code 
+"build:client": "vite build --outDir dist/client",
+// this is the specific build script for the server code 
+"build:server": "vite build --ssr server.ts --outDir dist/server",
+```
+
+We then update our server.ts file to match the build process, and also add a route to retrieve all blog posts:
+```js
+import express, { type Response } from "express";
+import { fileURLToPath } from "url";
+import path from "path";
+// this is the updated imports from our dashboardController
+// it also add the functionality to retrieve all blog posts
+// we later update its exports and functionality
+import {
+  dashboard,
+  getBlogPosts,
+} from "./src/backend/controllers/dashboardController.js";
+import { connectToDatabase } from "./src/backend/db.js";
+
+import dotenv from "dotenv";
+dotenv.config();
+
+const port = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === "production";
+
+// this files filename, same as before 
+const __filename = fileURLToPath(import.meta.url);
+// the directory of this file i.e. project root, same as before
+const __dirname = path.dirname(__filename);
+// new code for our build process:
+// relative to the built server.js file, i.e. this file
+const __distPath = path.join(path.dirname(__dirname));
+// new code for our build process:
+// the built frontend path relative to the built server.js
+const __distFrontendPath = path.join(__distPath, "frontend");
+
+// we wrap our server functions in a main function
+async function main() {
+  await connectToDatabase(process.env.NODE_ENV === "test");
+
+  const app = express();
+  app.use(express.json());
+
+  // we add a route to retrieve all blog posts 
+  app.get("/posts", getBlogPosts);
+  // this is still the route for our blog dashboard
+  app.post("/dashboard", dashboard);
+
+  // we use the same vite / express setup as earlier 
+  let vite;
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import("vite");
+    vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+      root: __dirname,
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(__distFrontendPath));
+    app.get("/*splat", ({ res }: { res: Response }) => {
+      res.sendFile(path.join(__distFrontendPath, "index.html"));
+    });
+  }
+
+  app.listen(port, () => {
+    console.log(
+      `running ${
+        isProduction ? "PROD" : "DEV"
+      } server at http://localhost:${port}`
+    );
+  });
+}
+
+// we run the main function and catch any errors
+main().catch((error) => console.log(error));
+```
+
+In our src directory, create a file called constants.ts, and place this inside it:
+```js
+// we add this to be able to filter our incoming form requests
+// and now if we want to create, edit, or delete a blog post 
+export const blogPostFormSubmitType = {
+  create: "create",
+  edit: "edit",
+  delete: "delete",
+};
+```
+
+Now update the BlogPostFormData type in the db.ts file:
+```js
+// we also need to update the formData type 
+export type BlogPostFormData = {
+  blogId: string;
+  blogTitle: string;
+  blogText: string;
+  // to include the form submit type
+  submitType:
+    | blogPostFormSubmitType.create
+    | blogPostFormSubmitType.edit
+    | blogPostFormSubmitType.delete;
+};
+```
+
+We now update the code in our dashboardController.ts:
+```js
+import type { Request, Response } from "express";
+import { collections } from "../db";
+// this is the updated BlogPostFormData type with the form submit types
+import type { BlogPostFormData } from "../../types/bitkrets";
+import { validateBlogPostFormData } from "../../frontend/utils/validate";
+import { ObjectId } from "mongodb";
+// we import the blogPostFormSubmitType we just created
+import { blogPostFormSubmitType } from "../../constants";
+
+// new function to return all blog posts
+export async function getBlogPosts({
+  req,
+  res,
+}: {
+  req: Request;
+  res: Response;
+}) {
+  // we try retrieve all blog posts from the database 
+  try {
+    const blogPosts = await collections.blogPosts?.find({}).toArray();
+    if (blogPosts) {
+      // if we have any blog posts we return them to the client
+      return res.status(200).send(blogPosts);
+    } else {
+      // else we send a message saying we do not have any blog posts
+      return res.status(204).send("There is not any blog posts to load");
+    }
+  } catch (error) {
+    // if any errors we send a error message to the client
+    return res.status(500).send();
+  }
+}
+
+// we update the dashboard function with a name instead of being the default
+export async function dashboard(req: Request, res: Response) {
+  // we retrieve the form data
+  const formData: BlogPostFormData = req.body;
+  // and validate it
+  if (!validateBlogPostFormData(formData)) {
+    return res.status(400).send("Invalid form data!");
+  }
+  // we then make checks for what CRUD action to perform
+  // we begin to check if we want to create a blog post 
+  if (formData.submitType === blogPostFormSubmitType.create) {
+    try {
+      // then try to create a blog post to the database
+      await collections.blogPosts?.insertOne(formData);
+      // and send a success message to the client
+      return res.send("created blog post");
+    } catch (error) {
+      // else log the error
+      console.error("failed to create a blog post", error)
+      // and send error message to the client 
+      return res.send("Failed to create blog post");
+    }
+  // if not creating a blog post, we check if we want to edit the blog post 
+  } else if (formData.submitType === blogPostFormSubmitType.edit) {
+    try {
+      // we try retrieving the blog post from the database 
+      const filter = { _id: new ObjectId(formData.blogId) };
+      // and create a updateDoc to inset into the database 
+      const updateDoc = {
+        $set: {
+          blogTitle: formData.blogTitle,
+          blogText: formData.blogText,
+        },
+      };
+      // we update the blog post 
+      await collections.blogPosts?.updateOne(filter, updateDoc);
+      // and send a success message to the client 
+      return res.send("updated to db");
+    } catch (error) {
+      // otherwise log the error 
+      console.log("failed to edit the blog post", error)
+      // and send error message to the client 
+      return res.send("Failed to edit post");
+    }
+    // lastly we check if incoming request is to delete a blog post 
+  } else if (formData.submitType === blogPostFormSubmitType.delete) {
+    try {
+      // we try delete it from the database 
+      collections.blogPosts?.deleteOne({ _id: new ObjectId(formData.blogId) });
+      // and send a success message to the client 
+      res.status(200).send("deleted blog post");
+    } catch (error) {
+      // otherwise catch and log any error
+      console.log("failed to delete the blog post", error)
+      // and send error message to the client 
+      return res.send("failed to delete blog post");
+    }
+  }
+}
+```
+
+Now we need to adjust the client code to handle the different cases for our blog posts. We make the following edits to our dashboard.ts file:
+```js
+// we import the newly created blogPostFormSubmitType
+import { blogPostFormSubmitType } from "../../constants";
+import type { BlogPost, BlogPostFormData } from "../../types/bitkrets";
+
+// we edit our html to include the new placeholder where we will display all the blog posts 
+function html() {
+  return `
+        <div id="blog-page">
+            <h1>Dashboard</h1>
+            <div id="blog-posts" style="display:flex;gap:2em">
+                Loading blog posts...
+            </div>
+            <h3>Write new blog post:</h3>
+            <form method="post" id="blog-form" style="display:flex;flex-direction:column;">
+                <input type="text" id="blog-id" value="" hidden>
+                <label for="blog-title">Blog Title</label>
+                <input type="text" name="blog-title" id="blog-title">
+                <label for="blog-text">Blog Text</label>
+                <textarea name="blog-text" id="blog-text" rows="4" cols="12"></textarea>
+                <button id="submit-button" data-submit-type="create">Create Post</button>
+            </form>
+        </div>
+    `;
+}
+
+// we also update the logic to display the retrieved blog posts
+// and to have the updated form submission types in our blog post form
+async function logic() {
+  // we fetch all blog posts
+  const response = await fetch("http://localhost:3000/posts");
+  // and assign them to an array
+  const blogPosts: BlogPost[] = await response.json();
+  // then fetch the div to show the blog posts
+  const blogPostsDiv = document.getElementById("blog-posts");
+  // if we have any blog posts, we map them to individual elements 
+  // and place them inside the blog posts placeholder element
+  if (blogPostsDiv) {
+    blogPostsDiv.innerHTML = blogPosts
+      .map(
+        (post) =>
+          `
+                <div class="post" style="border:1px dotted">
+                    <h5 data-title=${post._id}>${post.blogTitle}</h5>
+                    <p data-text=${post._id}>${post.blogText}</p>
+                    <button data-edit=${post._id}>Edit</button>
+                    <button data-delete=${post._id}>Delete</button>
+                </div>
+            `
+      )
+      .join("");
+  } else {
+    // if we do not have any blog posts we log a message saying there is no posts
+    console.log("Could not find blogPostDiv");
+  }
+
+  // blog post form inputs stay the same 
+  const blogForm = document.getElementById("blog-form") as HTMLFormElement;
+  const blogId = document.getElementById("blog-id") as HTMLInputElement;
+  const blogTitle = document.getElementById("blog-title") as HTMLInputElement;
+  const blogText = document.getElementById("blog-text") as HTMLInputElement;
+  const submitBtn = document.getElementById(
+    "submit-button"
+  ) as HTMLButtonElement;
+
+  // we add the action to delete a blog post
+  // we fetch all the delete buttons for our rendered blog posts
+  const deleteBtnList = document.querySelectorAll(
+    "[data-delete]"
+  ) as NodeListOf<HTMLButtonElement>;
+  // if there is any delete buttons we add the logic
+  if (deleteBtnList) {
+    // we loop over each button
+    deleteBtnList.forEach((deleteBtn) => {
+      // and add event listener
+      deleteBtn.addEventListener("click", async (event) => {
+        // prevent default 
+        event.preventDefault();
+        // fetch the blog post id from our dataset
+        let postId = deleteBtn.dataset["delete"];
+        if (postId) {
+          try {
+            // we then create a form data object 
+            const fd: BlogPostFormData = {
+              blogId: postId,
+              blogTitle: "delete",
+              blogText: "delete",
+              // with correct form submit type
+              submitType: blogPostFormSubmitType.delete,
+            };
+            // then make the request to the server 
+            const res = await fetch("http://localhost:3000/dashboard", {
+              method: "post",
+              headers: {
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(fd),
+            });
+            // wee show the response message
+            alert(await res.text());
+            // and reload the page 
+            window.location.reload();
+          } catch (error) {
+            // or catch any error and display a message
+            alert("Error while trying to delete a post, try again");
+          }
+        }
+      });
+    });
+  }
+
+  // logic to edit a blog post
+  // we need to make sure the blog form is available, since its used to edit 
+  // we also check for the specific form inputs
+  // we use them to populate with the blog post to edit 
+  if (blogForm && blogId && blogTitle && blogText && submitBtn) {
+    // we fetch all edit buttons
+    const editBtnList = document.querySelectorAll(
+      "[data-edit]"
+    ) as NodeListOf<HTMLButtonElement>;
+    if (editBtnList) {
+      // then loop over each
+      editBtnList.forEach((editBtn) => {
+        // and add event listener 
+        editBtn.addEventListener("click", (event) => {
+          // prevent default 
+          event.preventDefault();
+          // fetch the blog post id 
+          let postId = editBtn.dataset["edit"];
+          // then assign the blog post title to the blog post form 
+          // or show error message 
+          blogTitle.value =
+            document.querySelector(`[data-title="${postId}"]`)?.innerHTML ||
+            "Could not load the post";
+          // same with blog text
+          blogText.value =
+            document.querySelector(`[data-text="${postId}"]`)?.innerHTML ||
+            "Could't load the post";
+          // we then set correct form submit type 
+          submitBtn.setAttribute("data-submit-type", "edit");
+          // and change the button text to save instead of create
+          submitBtn.innerText = "Save Post";
+          // then set the blog post id, or an error message 
+          blogId.value = postId || "Could not load the post";
+        });
+      });
+    } else {
+      // else log an error message 
+      console.log("Could not find etidBtnList");
+    }
+  }
+
+  // logic to submit the blog post form 
+  // we add an event listener to the blog post form of form submit 
+  blogForm.addEventListener("submit", async (e) => {
+    // prevent the default 
+    e.preventDefault();
+    const submitType = submitBtn.getAttribute("data-submit-type");
+    // make sure the submit type is one of our specified types 
+    if (
+      submitType === blogPostFormSubmitType.create ||
+      submitType === blogPostFormSubmitType.edit ||
+      submitType === blogPostFormSubmitType.delete
+    ) {
+      // create a form data object to send to the server 
+      const formData: BlogPostFormData = {
+        blogId: blogId.value,
+        blogTitle: blogTitle.value,
+        blogText: blogText.value,
+        submitType: submitType,
+      };
+      try {
+        // then send the request to the server
+        const response = await fetch("http://localhost:3000/dashboard", {
+          method: "post",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        });
+        // we then display the response message 
+        alert(await response.text());
+        // then clear blog post form input values
+        blogTitle.value = "";
+        blogText.value = "";
+        // and refresh the page
+        window.location.reload();
+      } catch (error) {
+        // otherwise catch any errors and display an error message
+        alert("Error submiting the form");
+      }
+    } else {
+      // if not any correct submit type, display error message 
+      alert("Invalid submit type.");
+    }
+  });
+}
+
+// export the dashoard page logic 
+export function DashboardPage() {
+  return {
+    html: html,
+    logic: logic,
+  };
+}
+```
+
+### Now we can run the application and build for production
+
+Good job!

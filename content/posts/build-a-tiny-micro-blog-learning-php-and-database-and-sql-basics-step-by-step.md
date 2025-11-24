@@ -29,6 +29,8 @@ categories: ["full-stack"]
 - [Laravel - The PHP Framework For Web Artisans](https://laravel.com/)
 - [Database on Wikipedia](https://en.wikipedia.org/wiki/Database)
 - [SQL on Wikipedia](https://en.wikipedia.org/wiki/SQL)
+- [SQL on W3Schools](https://www.w3schools.com/sql/default.asp)
+- [SQL-notes by bradtraversy](https://gist.github.com/bradtraversy/c831baaad44343cc945e76c2e30927b3#file-mysql_cheat_sheet-md)
 - [Tutorials (SQLZoo): Learn SQL step by step](https://sqlzoo.net/wiki/SQL_Tutorial)
 - [Tutorials (SQLBolt): Learn SQL with simple, interactive exercises](https://sqlbolt.com/)
 - [MySQL on Wikipedia](https://en.wikipedia.org/wiki/MySQL)
@@ -69,3 +71,170 @@ Relational databases organize data into tables composed of rows and columns, fol
 ### Web security fundamentals
 
 Web security fundamentals encompass a set of practices and principles aimed at protecting web applications, databases, and users from common threats such as SQL injection, authentication breaches, and unauthorized data access. Key to database security is isolating the database server, enforcing encrypted connections using TLS, and applying the principle of least privilege by granting only minimal necessary permissions to database accounts. Preventing SQL injection, a common and critical web attack, involves using parameterized queries or safe stored procedures instead of dynamically concatenating user input into SQL queries. Authentication ensures that users or systems accessing web resources are verified, preferably through strong methods such as mutual TLS or secured credential management rather than insecure approaches like basic authentication without encryption. Overall, maintaining security involves proper configuration, regular patching, secure authentication mechanisms, and protecting sensitive credentials outside source code, in addition to defensive coding and input validation techniques to harden applications and databases against attack.
+
+
+## Let's build a tiny micro blog project
+
+We begin with installing XAMPP, a local PHP development environment that includes Apache, MySQL/MariaDB and phpmyadmin.
+
+- Apache is a web server, it serves our application code so that we can access it from the browser.
+- MySQL/MariaDB is the database software that allows us to create, read, delete, and update data.
+- phpMyAdmin is a web interface for the database instance, we use it to write SQL code and manage our database.
+
+[Visit this page](https://www.apachefriends.org/) and download the latest XAMPP version for your operating system.
+
+After the successful installation, launch the program and make sure that both the Apache and MySQL service is running.
+
+If you haven't installed any other web servers, the XAMPP service should be available on port 80 by default.
+
+Visit [http://localhost](http://localhost) to access the XAMPP instance.
+
+### Let's create the database
+
+After the successful XAMPP installation we move to the phpMyAdmin web interface:
+
+[http://localhost/phpmyadmin](http://localhost/phpmyadmin)
+
+Make sure you are inside the root of your localhost, then select the SQL tab:
+
+![alt](/images/phpmyadmin1.png)
+
+To perform SQL queries you enter the SQL code inside the text editor, then press the ```Go``` button in the bottom right corner.
+
+![alt](/images/phpmyadmin2.png)
+
+You should see this success message:
+
+![alt](/images/phpmyadmin3.png)
+
+Now we want to create a user to manage this database, navigate back to the SQL tab and execute the following query. This will create a user 'microblog' with the password 'password' and grant all privileges to the microblog database and all its tables:
+
+```sql
+grant all on microblog.* to 'microblog'@'localhost' identified by 'password';
+```
+
+We can now perform the rest of the queries to create the neccessary tables.
+
+But first we need to navigate to the microblog database, make sure the path is like the picture, also select the SQL tab:
+
+![alt](/images/phpmyadmin4.png)
+
+We want to create the following tables:
+
+- auth_user (to allow authentication, save posts, likes, and comments)
+- post
+- post_like
+- post_comment
+- follow
+
+**auth_user:**
+```sql
+create table auth_user (
+    -- specify an id column that auto increments 
+	id INT AUTO_INCREMENT NOT NULL,
+    -- we make sure the email is unique on the database level
+    email VARCHAR(255) UNIQUE NOT NULL,
+    -- we will only store a hashed version of the password
+    password_hash VARCHAR(255) NOT NULL,
+    -- and finnaly set the id column to the primary key
+    PRIMARY KEY (id)
+);
+```
+
+**post:**
+```sql
+CREATE TABLE post (
+    id INT AUTO_INCREMENT NOT NULL,
+    -- post content with specified length
+    content VARCHAR(255) NOT NULL,
+    -- the creator of the post, will point to a user
+    auth_user INT NOT NULL,
+    PRIMARY KEY (id),
+    -- foreign key assignment for the auth_user
+    FOREIGN KEY (auth_user) REFERENCES auth_user(id)
+);
+```
+
+**post_like:**
+```sql
+CREATE TABLE post_like (
+    id INT AUTO_INCREMENT NOT NULL,
+    post INT,
+    auth_user INT,
+    PRIMARY KEY (id),
+    FOREIGN KEY (post) REFERENCES post(id),
+    FOREIGN KEY (auth_user) REFERENCES auth_user(id),
+    -- we make sure to put a unique constraint
+    -- this allows a user to like a post 1 time
+    CONSTRAINT uc_like_auth_user UNIQUE (post, auth_user)
+);
+```
+
+**post_comment:** 
+```sql
+CREATE TABLE post_comment (
+    id INT NOT NULL AUTO_INCREMENT,
+    content VARCHAR(255) NOT NULL,
+    post INT NOT NULL,
+    auth_user INT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY (post) REFERENCES post(id),
+    FOREIGN KEY (auth_user) REFERENCES auth_user(id)
+    -- a user may comment a post multiple times
+);
+```
+
+
+**follow:**
+```sql
+CREATE TABLE follow (
+    id INT AUTO_INCREMENT NOT NULL,
+    follower INT,
+    -- users may not follow themselves
+    followed INT CHECK (followed != follower),
+    PRIMARY KEY (id),
+    FOREIGN KEY (follower) REFERENCES auth_user(id),
+    FOREIGN KEY (followed) REFERENCES auth_user(id),
+    -- users may follow each other only one time
+    CONSTRAINT uc_follower_followed UNIQUE (follower, followed)
+);
+```
+
+### Let's add some entries!
+
+**add 2st auth_user:**
+```sql
+INSERT INTO auth_user (email, password_hash) 
+VALUES ("email@example.com", "unhashed_password");
+-- you may add as many queries you like separated with a semicolon
+INSERT INTO auth_user (email, password_hash) 
+VALUES ("email2@example.com", "unhashed_password");
+```
+
+**add a post:**
+```sql 
+INSERT INTO post (content, auth_user)
+VALUES ("This is post content!", 1);
+```
+
+**add a follow:**
+```sql
+INSERT INTO follow (follower, followed)
+VALUES (2, 1);
+```
+
+**add a like:**
+```sql
+INSERT INTO post_like (post, auth_user)
+VALUES (1, 2);
+```
+
+**add a comment:**
+```sql
+INSERT INTO post_comment (content, post, auth_user)
+VALUES ("This is a post comment!", 1, 2);
+```
+
+### Let's fetch the newly created data:
+
+...

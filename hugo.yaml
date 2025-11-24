@@ -2,6 +2,12 @@ languageCode: en-us
 title: videvide.github.io
 theme: ["PaperMod"]
 enableRobotsTXT: true
+module:
+  mounts:
+    - source: static
+      target: static
+    - source: images
+      target: static/images
 menu:
   main:
     - identifier: categories

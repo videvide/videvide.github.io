@@ -7,6 +7,8 @@ categories: ["full-stack"]
 
 **Advice:** Use LLMs and search engines to expand on topics, do more research, or get help if you get stuck on a command.
 
+**Free PHP extension for visual studio code: PHP Intelephense**
+
 ## This is what we are learning in this project
 - Web fundamentals and how the internet works
 - Server-side architecture and application design

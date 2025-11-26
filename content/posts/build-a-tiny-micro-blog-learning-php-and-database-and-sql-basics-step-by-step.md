@@ -77,6 +77,8 @@ Web security fundamentals encompass a set of practices and principles aimed at p
 
 ## Let's build a tiny micro blog project
 
+**The two most important things is to first create a  solid database design, that allows data integrity and security, and then write your web facing code in a way that do not allow users to change that.**
+
 We begin with installing XAMPP, a local PHP development environment that includes Apache, MySQL/MariaDB and phpmyadmin.
 
 - Apache is a web server, it serves our application code so that we can access it from the browser.

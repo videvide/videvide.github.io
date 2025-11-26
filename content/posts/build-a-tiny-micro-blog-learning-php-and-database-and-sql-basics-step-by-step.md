@@ -201,10 +201,19 @@ CREATE TABLE follow (
     CONSTRAINT uc_follower_followed UNIQUE (follower, followed)
 );
 ```
+---
+
+If you need to [ALTER](https://www.w3schools.com/sql/sql_alter.asp) a table, just know that it is as straight forward as creating a table.
+
+And if you need to [DROP](https://www.w3schools.com/sql/sql_drop_db.asp) a table, then it is even easier!
+
+[DELETE](https://www.w3schools.com/sql/sql_delete.asp) is basically the same, just performed on a row.
+
+---
 
 ### Let's add some entries!
 
-**add 2st auth_user:**
+**add 2 rows to the auth_user table:**
 ```sql
 INSERT INTO auth_user (email, password_hash) 
 VALUES ("email@example.com", "unhashed_password");
@@ -236,7 +245,60 @@ VALUES (1, 2);
 INSERT INTO post_comment (content, post, auth_user)
 VALUES ("This is a post comment!", 1, 2);
 ```
+---
+
+Good job!
+
+Take some time and add as much data as you like, it could perhaps be more educational to add a few rows to each table, that way you may experiment with fetching it all.
+
+---
 
 ### Let's fetch the newly created data:
+
+The [SELECT](https://www.w3schools.com/sql/sql_select.asp) statement is used to fetch data from the database.
+```sql
+-- selects all columns and returns all rows
+SELECT * FROM auth_user;
+-- we may also explicitly select all columns 
+SELECT id, email, password_hash FROM auth_user;
+-- or just specific columns
+SELECT email FROM auth_user;
+```
+
+The [WHERE](https://www.w3schools.com/sql/sql_where.asp) statement can be used together with SELECT to filter out specific entries.
+```sql
+-- we can fetch a specific entry using the WHERE statement
+SELECT * FROM auth_user WHERE id = 1;
+-- with explicit column selection
+SELECT id, email, password_hash FROM auth_user WHERE id = 1;
+-- again selecting specific columns 
+SELECT email FROM auth_user WHERE id = 1;
+```
+
+Another way to fetch multiple related entries is to [JOIN](https://www.w3schools.com/sql/sql_join.asp) them thorugh their [FOREIGN KEY](https://www.w3schools.com/sql/sql_foreignkey.asp):
+```sql
+-- this will join the two tables and return all the posts fore each auth_user 
+SELECT * FROM auth_user JOIN post ON auth_user.id = post.auth_user;
+-- you may also mix it with the WHERE statement,
+-- this will join the two tables and return all the posts for a specific auth_user
+SELECT * FROM auth_user 
+JOIN post 
+ON auth_user.id = post.auth_user 
+WHERE auth_user.id = 1;
+-- you may also use functions like COUNT to count the amount of likes a post have
+-- this returns only the number of likes for the specific post
+SELECT COUNT(*) FROM post_like WHERE post = 1;
+-- this will return all the combined likes for all posts of specific auth_user
+SELECT COUNT(*) FROM post_like 
+JOIN post 
+ON post_like.post = post.id 
+WHERE post.auth_user = 1;
+```
+
+As you can tell this is the strength of relational databases!
+
+### Next, PHP!
+
+We want to create a simple web application that takes user input through form data then saves it to the database. This is a perfect job for PHP, with built in support for all the necessary steps. The goal is to keep it simple, and not focus on any design.
 
 ...

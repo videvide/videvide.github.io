@@ -311,7 +311,11 @@ PHP has built in support for SQL DBMS's (Database Management System) through [PD
 
 Let's start simple and just fetch some data from the database and echo it to the browser.
 
+**First of all, we need to setup the project so that the php web environment can pick it up. That is inside the XAMPP htdocs directory! On my machine it is located at: ```/Applications/XAMPP/htodcs/``` but you might have a different setup.**
+
 Create a new directory ```microblog``` and create a file ```index.php``` inside it.
+
+**Now your project will be available through visiting your browser and navigating to: ```http://localhost/microblog``` for now, it is just a blank page!**
 
 We create a database connection following the [official documentation](https://www.php.net/manual/en/pdo.connections.php). Do not worry about closing the connection, this is nothing we need to do manually, unless we have a specific reason.
 

@@ -9,6 +9,8 @@ categories: ["full-stack"]
 
 **Free PHP extension for visual studio code: PHP Intelephense**
 
+Sidenote: Navigating the PHP documentation need a lot of patience.
+
 ## This is what we are learning in this project
 - Web fundamentals and how the internet works
 - Server-side architecture and application design
@@ -302,5 +304,70 @@ As you can tell this is the strength of relational databases!
 ### Next, PHP!
 
 We want to create a simple web application that takes user input through form data then saves it to the database. This is a perfect job for PHP, with built in support for all the necessary steps. The goal is to keep it simple, and not focus on any design.
+
+To start, we create the database connection. 
+
+PHP has built in support for SQL DBMS's (Database Management System) through [PDO](https://www.php.net/manual/en/book.pdo.php). We are using MySQL, and will use the [MySQL PDO Driver](https://www.php.net/manual/en/ref.pdo-mysql.php).
+
+Let's start simple and just fetch some data from the database and echo it to the browser.
+
+Create a new directory ```microblog``` and create a file ```index.php``` inside it.
+
+We create a database connection following the [official documentation](https://www.php.net/manual/en/pdo.connections.php). Do not worry about closing the connection, this is nothing we need to do manually, unless we have a specific reason.
+
+We use [PDO::setAttribute](https://www.php.net/manual/en/pdo.setattribute.php) to change the default return type to object instead of array.
+
+Inside index.php:
+```php
+<?php
+// $dbh = "database handler" is the documented naming convention
+// we provide the database credentials we gave our database at the create step
+$dbh = new PDO('mysql:host=localhost;dbname=microblog', 'microblog', 'password');
+// this sets the attribute for the default return type, in this case: object
+$dbh->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+```
+
+---
+
+I recommend to always use the [PDO::prepare](https://www.php.net/manual/en/pdo.prepare.php) method to safely perform SQL queries, even if you do not plan to add any parameters, this way you always know you are playing it safe.
+
+This method can be used to safely parse user provided data into SQL safe parameters.
+
+It is never a good idea to allow the client/user to provide entire SQL query strings, but when using the prepare method, it is safe to allow the client/user to provide parameters like auth_user id's, to fetch specific users.
+
+---
+
+
+```php
+// $sth = "statement handler" is the official naming convention
+// this prepares the SQL statement and will allow for parameters
+$sth_without_params = $dbh->prepare('SELECT * FROM auth_user');
+// since this statment does not have any params we just execute
+$sth_without_params->execute();
+// and fetch the recieved data, with fetchAll to fetch all rows
+$sth_without_params->fetchAll();
+// use var_dump() to print the entire content of the returned object
+var_dump($result_without_params);
+// you may access each of the included objects and its attributes 
+echo $result_without_params[0]->id;
+echo $result_without_params[0]->email;
+echo $result_without_params[0]->password_hash;
+// this time we use some parameters to fetch a specific row 
+$sth_with_params = $dbh->prepare('SELECT * FROM auth_user WHERE id = :id');
+// then perform the execute, at the same time add the parameter data
+$sth_with_params->execute(["id" => 1]);
+// we then fetch the object
+$result_with_params = $sth_with_params->fetch();
+// and use var_dump() to display it
+var_dump($result_with_params);
+// also access each of the objects attributes
+echo $result_with_params->id;
+echo $result_with_params->email;
+echo $result_with_params->password_hash;
+```
+
+With these tools you may play around and try to add, fetch, alter, and delete data. It is the same SQL commands as in the DBMS.
+
+### Time to add some HTML elements and form logic:
 
 ...

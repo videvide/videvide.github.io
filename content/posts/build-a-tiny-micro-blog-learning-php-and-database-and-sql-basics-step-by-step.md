@@ -372,6 +372,186 @@ echo $result_with_params->password_hash;
 
 With these tools you may play around and try to add, fetch, alter, and delete data. It is the same SQL commands as in the DBMS.
 
+We later remove most of this code, and move the database connection to a seperate file.
+
 ### Time to add some HTML elements and form logic:
+
+We create a simple project structure to hold our files: 
+```bash
+.
+├── components
+│   ├── footer.php
+│   └── head.php
+├── functions
+│   ├── db.php
+│   └── logout.php
+├── index.php
+├── login.php
+├── post.php
+├── profile.php
+└── signup.php
+```
+
+Then add the following HTML boilerplate code to the ```head.php``` and ```footer.php``` files, we use this to simplify our pages. 
+
+We later add all the functionalities.
+
+Inside head.php:
+```html
+<!-- here we specify the HTML base code, and include it in our .php files -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- assign variable to title, this is set in the file including this file  -->
+    <title>micro-blog - <?= $title ?></title>
+</head>
+<body>
+    <nav>
+        <ul>
+            <a href="index.php">
+                <li>
+                    Home
+                </li>
+            </a>
+            <a href="signup.php">
+                <li>
+                    Signup
+                </li>
+            </a>
+            <a href="login.php">
+                <li>Login</li>
+            </a>
+            <a href="profile.php">
+                <li>
+                    Profile
+                </li>
+            </a>
+            <a href="functions/logout.php">
+                <li>Logout</li>
+            </a>
+        </ul>
+    </nav>
+    <!-- body end-tag is rendered inside the footer.php module -->
+```
+
+Then add this code to the footer.php file to enclose the HTML code, this will be imported at the bottom of our PHP files:
+```html
+<div>
+    <p>This is the footer © micro-blog</p>
+</div>
+</body>
+</html>
+```
+
+Now, inside our index.php file we import both these files, and put our own HTML in the middle: 
+```html
+<?php
+$title = "Home Page";
+include 'components/head.php';
+?>
+
+<h1>Welcome to micro-blog!</h1>
+
+<?php
+include 'components/footer.php';
+?>
+```
+
+Now you may visit the site and see the changes.
+
+Next we add the code to our other pages.
+
+login.php
+```html
+<?php
+$title = "Login Page";
+include 'components/head.php';
+?>
+
+<h1>Login to your account:</h1>
+<form action="login.php" method="post">
+    <div>
+        <label for="login-email">Email:</label>
+        <input type="email" name="login-email" id="login-email">
+    </div>
+    <div>
+        <label for="login-password">Password:</label>
+        <input type="password" name="login-password" id="login-password">
+    </div>
+    <div>
+        <button type="submit">Login</button>
+    </div>
+</form>
+
+<?php
+include 'components/footer.php';
+?>
+```
+
+signup.php
+```html
+<?php
+$title = "Signup Page";
+include 'components/head.php';
+?>
+
+<h1>Signup for an account:</h1>
+<form action="signup.php" method="post">
+    <div>
+        <label for="signup-email">Email:</label>
+        <input type="email" name="signup-email" id="signup-email">
+    </div>
+    <div>
+        <label for="signup-password">Password:</label>
+        <input type="password" name="signup-password" id="signup-password">
+    </div>
+    <div>
+        <button type="submit">Signup</button>
+    </div>
+</form>
+
+<?php
+include 'components/footer.php';
+?>
+```
+
+post.php
+```html
+<?php
+$title = "Create Post";
+include 'components/head.php';
+?>
+
+<h1>Create Post</h1>
+<form action="post.php">
+    <textarea name="post-content" id="post-content"></textarea>
+    <button type="submit">Create Post</button>
+</form>
+
+<?php
+include 'components/footer.php';
+?>
+```
+
+profile.php
+```html
+<?php
+$title = "Profile";
+include 'components/head.php';
+?>
+
+<!-- we later add more functionalities after we add authentication  -->
+<h1>This is the profile page!</h1>
+
+<?php
+include 'components/footer.php';
+?>
+```
+
+That is the basic HTML code, we have to add more to it in a while.
+
+### Time to move the database connection to its own file
 
 ...

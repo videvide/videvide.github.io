@@ -374,131 +374,827 @@ With these tools you may play around and try to add, fetch, alter, and delete da
 
 We later remove most of this code, and move the database connection to a seperate file.
 
-### Time to add some HTML elements and form logic:
+### Time to build the actual project
 
-We create a simple project structure to hold our files: 
+this is the final tree structure: 
 ```bash
 .
 ├── components
+│   ├── comments.php
 │   ├── footer.php
-│   └── head.php
+│   ├── head.php
+│   └── posts.php
+├── create_post.php
+├── edit_post.php
 ├── functions
+│   ├── change_password.php
+│   ├── comment.php
 │   ├── db.php
-│   └── logout.php
+│   ├── follow.php
+│   ├── like.php
+│   ├── logout.php
+│   ├── sql.php
+│   ├── unfollow.php
+│   └── unlike.php
 ├── index.php
 ├── login.php
 ├── post.php
 ├── profile.php
-└── signup.php
+├── signup.php
+└── styles.css
 ```
 
-Then add the following HTML boilerplate code to the ```head.php``` and ```footer.php``` files, we use this to simplify our pages. 
+### Begin moving the database connection to its own file ```functions/db.php```:
+```php
+<?php
 
-We later add all the functionalities.
+$dbh = new PDO('mysql:host=127.0.0.1;dbname=microblog', 'microblog', 'password');
+$dbh->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+```
 
-Inside head.php:
+### Create a file to write all of our SQL functions ```functions/sql.php```:
+```php
+<?php
+
+/* =========================
+   1. Authentication / Users
+   ========================= */
+
+function email_exists($dbh, $email)
+{
+    $email_exists_sql =
+        "SELECT email
+         FROM auth_user
+         WHERE auth_user.email = :email";
+    $email_exists_sth = $dbh->prepare($email_exists_sql);
+    $email_exists_sth->execute(["email" => $email]);
+    return $email_exists_sth->rowCount();
+}
+
+function fetch_user_to_login($dbh, $login_email)
+{
+    $login_sql =
+        "SELECT 
+            id, 
+            email, 
+            password_hash
+         FROM auth_user 
+         WHERE email = :login_email";
+    $login_sth = $dbh->prepare($login_sql);
+    $login_sth->execute([
+        "login_email" => $login_email,
+    ]);
+    return $login_sth->fetch();
+}
+
+function create_user($dbh, $email, $password_hash)
+{
+    $create_user_sql =
+        "INSERT INTO auth_user
+            (email, password_hash)
+         VALUES (:email, :password_hash)";
+    $create_user_sth = $dbh->prepare($create_user_sql);
+    $create_user_sth->execute([
+        "email" => $email,
+        "password_hash" => $password_hash
+    ]);
+
+    $created_user_sql =
+        "SELECT id, email
+         FROM auth_user
+         WHERE email = :email";
+    $created_user_sth = $dbh->prepare($created_user_sql);
+    $created_user_sth->execute(["email" => $email]);
+    return $created_user_sth->fetch();
+}
+
+function change_password($dbh, $auth_user_id, $new_password)
+{
+    $change_password_sql =
+        "UPDATE auth_user
+         SET auth_user.password_hash = :new_password
+         WHERE auth_user.id = :auth_user_id";
+    $change_password_sth = $dbh->prepare($change_password_sql);
+    $change_password_sth->execute([
+        "auth_user_id" => $auth_user_id,
+        "new_password" => $new_password
+    ]);
+    return $change_password_sth->rowCount();
+}
+
+
+/* =========================
+   2. Profiles & Follows
+   ========================= */
+
+function fetch_profile_user($dbh, $profile_user_id)
+{
+    $profile_sth = $dbh->prepare(
+        "SELECT 
+            id, 
+            email
+         FROM auth_user
+         WHERE id = :id"
+    );
+    $profile_sth->execute(["id" => $profile_user_id]);
+    return $profile_sth->fetch();
+}
+
+function fetch_profile_posts($dbh, $profile_user_id)
+{
+    $posts_sth = $dbh->prepare(
+        "SELECT 
+            post.id AS post_id,
+            post.title,
+            post.content,
+            post.created_at,
+            auth_user.id AS auth_user_id,
+            auth_user.email
+         FROM post
+         LEFT JOIN auth_user
+            ON post.auth_user = auth_user.id
+         WHERE post.auth_user = :profile_user_id
+         ORDER BY post.created_at DESC"
+    );
+    $posts_sth->execute(["profile_user_id" => $profile_user_id]);
+    return $posts_sth->fetchAll();
+}
+
+function fetch_followers($dbh, $profile_user_id)
+{
+    $followers_sql =
+        "SELECT COUNT(*)
+         FROM follow
+         WHERE followed = :profile_user_id";
+    $followers_sth = $dbh->prepare($followers_sql);
+    $followers_sth->execute([
+        "profile_user_id" => $profile_user_id
+    ]);
+    return $followers_sth->fetchColumn();
+}
+
+function current_user_is_following($dbh, $auth_user_id, $profile_user_id)
+{
+    $sth = $dbh->prepare(
+        "SELECT follow.follower
+         FROM follow
+         WHERE followed = :profile_user_id
+           AND follower = :auth_user_id"
+    );
+    $sth->execute([
+        "profile_user_id" => $profile_user_id,
+        "auth_user_id" => $auth_user_id
+    ]);
+    return $sth->rowCount();
+}
+
+function create_follow($dbh, $auth_user_id, $profile_user_id)
+{
+    $follow_sql =
+        "INSERT INTO follow
+            (follower, followed)
+         VALUES (:auth_user_id, :profile_user_id)";
+    $follow_sth = $dbh->prepare($follow_sql);
+    $follow_sth->execute([
+        "auth_user_id" => $auth_user_id,
+        "profile_user_id" => $profile_user_id
+    ]);
+    return $follow_sth->rowCount();
+}
+
+function create_unfollow($dbh, $auth_user_id, $profile_user_id)
+{
+    $unfollow_sql =
+        "DELETE FROM follow
+         WHERE follower = :auth_user_id
+           AND followed = :profile_user_id";
+    $unfollow_sth = $dbh->prepare($unfollow_sql);
+    $unfollow_sth->execute([
+        "auth_user_id" => $auth_user_id,
+        "profile_user_id" => $profile_user_id
+    ]);
+    return $unfollow_sth->rowCount();
+}
+
+
+/* =========================
+   3. Posts
+   ========================= */
+
+function fetch_posts($dbh)
+{
+    $posts_sth = $dbh->prepare(
+        "SELECT
+            post.id AS post_id,
+            post.title,
+            post.content,
+            post.created_at,
+            auth_user.id AS auth_user_id,
+            auth_user.email
+         FROM post
+         LEFT JOIN auth_user
+            ON post.auth_user = auth_user.id
+         ORDER BY post.created_at DESC"
+    );
+    $posts_sth->execute();
+    return $posts_sth->fetchAll();
+}
+
+function fetch_post($dbh, $post_id)
+{
+    $post_sql =
+        "SELECT
+            post.id AS post_id,
+            post.title,
+            post.content,
+            post.created_at,
+            auth_user.id AS auth_user_id,
+            auth_user.email
+         FROM post
+         LEFT JOIN auth_user
+            ON post.auth_user = auth_user.id
+         WHERE post.id = :post_id";
+    $post_sth = $dbh->prepare($post_sql);
+    $post_sth->execute(["post_id" => $post_id]);
+    return $post_sth->fetch();
+}
+
+function fetch_post_to_edit($dbh, $auth_user_id, $post_id)
+{
+    $post_to_edit_sql =
+        "SELECT
+            post.id AS post_id,
+            post.title,
+            post.auth_user,
+            post.content,
+            auth_user.id AS auth_user_id
+         FROM post
+         LEFT JOIN auth_user
+            ON post.auth_user = auth_user.id
+         WHERE post.id = :post_id
+           AND auth_user.id = :auth_user_id";
+    $sth = $dbh->prepare($post_to_edit_sql);
+    $sth->execute([
+        "post_id" => $post_id,
+        "auth_user_id" => $auth_user_id
+    ]);
+    return $sth->fetch();
+}
+
+function create_post($dbh, $auth_user_id, $post_title, $post_content)
+{
+    $create_post_sql =
+        "INSERT INTO post
+            (auth_user, title, content)
+         VALUES (:auth_user, :post_title, :post_content)";
+    $sth = $dbh->prepare($create_post_sql);
+    $sth->execute([
+        "auth_user" => $auth_user_id,
+        "post_title" => $post_title,
+        "post_content" => $post_content
+    ]);
+    return $sth->rowCount();
+}
+
+function edit_post($dbh, $auth_user_id, $post_id, $post_title, $post_content)
+{
+    $edit_post_sql =
+        "UPDATE post
+         SET title = :post_title,
+             content = :post_content
+         WHERE id = :post_id
+           AND auth_user = :auth_user_id";
+    $sth = $dbh->prepare($edit_post_sql);
+    $sth->execute([
+        "post_id" => $post_id,
+        "post_title" => $post_title,
+        "post_content" => $post_content,
+        "auth_user_id" => $auth_user_id
+    ]);
+    return $sth->rowCount();
+}
+
+
+/* =========================
+   4. Post Likes
+   ========================= */
+
+function fetch_likes($dbh, $post_id)
+{
+    $sth = $dbh->prepare(
+        "SELECT COUNT(*)
+         FROM post_like
+         WHERE post = :post_id"
+    );
+    $sth->execute(["post_id" => $post_id]);
+    return $sth->fetchColumn();
+}
+
+function current_user_has_liked($dbh, $auth_user_id)
+{
+    $sth = $dbh->prepare(
+        "SELECT auth_user
+         FROM post_like
+         WHERE auth_user = :auth_user_id"
+    );
+    $sth->execute(["auth_user_id" => $auth_user_id]);
+    return $sth->rowCount();
+}
+
+function create_post_like($dbh, $post_id, $auth_user_id)
+{
+    $sql =
+        "INSERT INTO post_like
+            (post, auth_user)
+         VALUES (:post_id, :auth_user_id)";
+    $sth = $dbh->prepare($sql);
+    $sth->execute([
+        "post_id" => $post_id,
+        "auth_user_id" => $auth_user_id
+    ]);
+    return $sth->rowCount();
+}
+
+function create_post_unlike($dbh, $post_id, $auth_user_id)
+{
+    $sql =
+        "DELETE FROM post_like
+         WHERE post = :post_id
+           AND auth_user = :auth_user_id";
+    $sth = $dbh->prepare($sql);
+    $sth->execute([
+        "post_id" => $post_id,
+        "auth_user_id" => $auth_user_id
+    ]);
+    return $sth->rowCount();
+}
+
+
+/* =========================
+   5. Comments
+   ========================= */
+
+function fetch_comments($dbh, $post_id)
+{
+    $comments_sql =
+        "SELECT
+            post_comment.content,
+            post_comment.created_at,
+            auth_user.email
+         FROM post_comment
+         LEFT JOIN auth_user
+            ON post_comment.auth_user = auth_user.id
+         WHERE post_comment.post = :post_id";
+    $sth = $dbh->prepare($comments_sql);
+    $sth->execute(["post_id" => $post_id]);
+    return $sth->fetchAll();
+}
+
+function create_comment($dbh, $auth_user_id, $post_id, $content)
+{
+    $sth = $dbh->prepare(
+        "INSERT INTO post_comment
+            (auth_user, post, content)
+         VALUES (:auth_user_id, :post_id, :content)"
+    );
+    $sth->execute([
+        "auth_user_id" => $auth_user_id,
+        "post_id" => $post_id,
+        "content" => $content
+    ]);
+    return $sth->rowCount();
+}
+```
+
+### Now lay out the basic HTML templating in ```components/head.php```, ```components/footer.php```, ```components/posts.php```, and ```components/comments.php```:
+
+### ```components/head.php```:
 ```html
-<!-- here we specify the HTML base code, and include it in our .php files -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- assign variable to title, this is set in the file including this file  -->
-    <title>micro-blog - <?= $title ?></title>
+    <link rel="stylesheet" href="styles.css">
+    <title>microblog - <?= $title ?></title>
 </head>
+
 <body>
     <nav>
         <ul>
-            <a href="index.php">
+            <a href="/microblog/index.php">
                 <li>
+                    <!-- this is the index page with all the different profiles -->
                     Home
                 </li>
-            </a>
-            <a href="signup.php">
-                <li>
-                    Signup
-                </li>
-            </a>
-            <a href="login.php">
-                <li>Login</li>
-            </a>
-            <a href="profile.php">
-                <li>
-                    Profile
-                </li>
-            </a>
-            <a href="functions/logout.php">
-                <li>Logout</li>
+                <?php if (empty($_SESSION["auth_user"])): ?>
+                    <a href="/microblog/signup.php">
+                        <li>
+                            <!-- this is the signup page -->
+                            Signup
+                        </li>
+                    </a>
+                    <a href="/microblog/login.php">
+                        <!-- this should redirect to the login page -->
+                        <li>Login</li>
+                    </a>
+                <?php else: ?>
+                    <a href="/microblog/profile.php?id=<?= $_SESSION["auth_user"]->id ?>">
+                        <li>
+                            <!-- this redirects to the logged in users profile page -->
+                            Profile
+                        </li>
+                    </a>
+                    <form action="/microblog/functions/logout.php" method="post">
+                        <!-- this should send a post request to the logout function -->
+                        <input type="submit" value="Logout">
+                    </form>
+                <?php endif; ?>
             </a>
         </ul>
     </nav>
     <!-- body end-tag is rendered inside the footer.php module -->
 ```
 
-Then add this code to the footer.php file to enclose the HTML code, this will be imported at the bottom of our PHP files:
+### ```components/footer.php```:
 ```html
 <div>
-    <p>This is the footer © micro-blog</p>
+    <p>This is the footer © microblog</p>
 </div>
 </body>
+
 </html>
 ```
 
-Now, inside our index.php file we import both these files, and put our own HTML in the middle: 
+### ```components/posts.php```:
+
 ```html
+<div class="posts-section">
+    <?php foreach ($posts as $post): ?>
+        <div class="post-card">
+            <p><?= $post->post_id ?></p>
+            <p><?= $post->title ?></p>
+            <p><?= $post->content ?></p>
+            <p><?= $post->created_at ?></p>
+            <p><?= $post->email ?></p>
+            <a href="/microblog/post.php?id=<?= $post->post_id ?>">View post</a>
+            <?php if ($auth_user_is_owner): ?>
+                <a href="/microblog/edit_post.php?id=<?= $post->post_id ?>">Edit post</a>
+            <?php endif ?>
+        </div>
+    <?php endforeach ?>
+</div>
+```
+
+### ```components/comments.php```:
+
+```html
+<div class="comment-section">
+    <?php if ($comments): ?>
+        <p>Comments:</p>
+        <?php foreach ($comments as $comment): ?>
+            <div class="comment-card">
+                <p><?= htmlspecialchars($comment->content) ?></p>
+                <p><?= $comment->created_at ?></p>
+                <p><?= $comment->email ?></p>
+            </div>
+        <?php endforeach ?>
+    <?php endif ?>
+
+    <?php if ($auth_user): ?>
+        <form action="/microblog/functions/comment.php" method="post">
+            <div>
+                <input type="text" name="comment-post-id" value="<?= $post_id ?>" hidden>
+                <label for="comment-content">Add your comment</label>
+                <textarea name="comment-content" id="comment-content"></textarea>
+            </div>
+            <input type="submit" value="Add comment">
+        </form>
+    <?php else: ?>
+        <p><a href="login.php">Login</a> to comment on the post</p>
+    <?php endif ?>
+</div>
+```
+
+### Now let's add the ```functions/``` beside ```db.php``` and ```sql.php```:
+
+### ```functions/logout.php```:
+```php
 <?php
+
+session_start();
+
+if (!$_SESSION["auth_user"]) {
+    header(header: "Location: http://localhost:8080/microblog/index.php");
+    die();
+}
+
+$_SESSION = array();
+
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(
+        session_name(),
+        "",
+        time() - 42000,
+        $params["path"],
+        $params["domain"],
+        $params["secure"],
+        $params["httponly"]
+    );
+}
+
+session_destroy();
+
+header(header: "Location: http://localhost:8080/microblog/index.php");
+```
+
+### ```functions/change_password.php```:
+
+```php
+<?php
+
+session_start();
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+
+    include "db.php";
+    include "sql.php";
+
+    $auth_user_id = $_SESSION["auth_user"]->id;
+    $new_password = $_POST["change-password-input"];
+
+    $success = change_password($dbh, $auth_user_id, $new_password);
+
+    if ($success) {
+        header(header: "Location: http://localhost:8080/microblog/profile.php?id=$auth_user_id");
+    } else {
+        die("Failed to change password");
+    }
+
+} else {
+    die("Unauthorized");
+}
+```
+
+### ```functions/like.php```:
+
+```php
+<?php
+
+session_start();
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+    include "db.php";
+    include "sql.php";
+
+    $post_id = $_POST["like-post-id"];
+    $auth_user_id = $_SESSION["auth_user"]->id;
+
+    $has_liked = current_user_has_liked($dbh, $auth_user_id);
+    
+    // check if user likes post
+    if($has_liked) {
+        die("Cannot like since already liked");
+    }
+
+    $success = create_post_like($dbh, $post_id, $auth_user_id);
+
+    if($success) {
+        header(header: "Location: http://localhost:8080/microblog/post.php?id=$post_id");
+    } else {
+        echo "failed to like post";
+    }
+} else {
+    die("Unathorized");
+}
+```
+
+### ```functions/unlike.php```:
+
+```php
+<?php
+
+session_start();
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+    include "db.php";
+    include "sql.php";
+    
+    $post_id = $_POST["like-post-id"];
+    $auth_user_id = $_SESSION["auth_user"]->id;
+    
+    $has_liked = current_user_has_liked($dbh, $auth_user_id);
+    
+    // check if user likes post
+    if(!$has_liked) {
+        die("Cannot remove like since there is none");
+    }
+
+    $success = create_post_unlike($dbh, $post_id, $auth_user_id);
+
+    if($success) {
+        header(header: "Location: http://localhost:8080/microblog/post.php?id=$post_id");
+    } else {
+        echo "failed to like post";
+    }
+} else {
+    die("Unathorized");
+}
+```
+
+### ```functions/follow.php```:
+
+```php
+<?php
+
+session_start();
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+    include "db.php";
+    include "sql.php";
+
+    $profile_user_id = $_POST["profile-user-id"];
+    $auth_user_id = $_SESSION["auth_user"]->id;
+
+   $current_user_is_following = current_user_is_following(
+        $dbh, 
+        $auth_user_id, 
+        $profile_user_id
+    );
+    
+    // check if user is following
+    if($current_user_is_following) {
+        die("Cannot follow since already following");
+    }
+
+    $success = create_follow($dbh, $auth_user_id, $profile_user_id);
+
+    if($success) {
+        header(header: "Location: http://localhost:8080/microblog/profile.php?id=$profile_user_id");
+    } else {
+        echo "failed to follow";
+    }
+} else {
+    die("Unathorized");
+}
+```
+
+### ```functions/unfollow.php```:
+
+```php
+<?php
+
+session_start();
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+    include "db.php";
+    include "sql.php";
+
+    $profile_user_id = $_POST["profile-user-id"];
+    $auth_user_id = $_SESSION["auth_user"]->id;
+
+   $current_user_is_following = current_user_is_following(
+        $dbh, 
+        $auth_user_id, 
+        $profile_user_id
+    );
+    
+    // check if user is following
+    if(!$current_user_is_following) {
+        die("Cannot unfollow since already not following");
+    }
+
+    $success = create_unfollow($dbh, $auth_user_id, $profile_user_id);
+
+    if($success) {
+        header(header: "Location: http://localhost:8080/microblog/profile.php?id=$profile_user_id");
+    } else {
+        echo "failed to follow";
+    }
+} else {
+    die("Unathorized");
+}
+```
+
+### ```functions/comment.php```:
+
+```php 
+<?php
+
+session_start();
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+    include "db.php";
+    include "sql.php";
+
+    $auth_user_id = $_SESSION["auth_user"]->id;
+    $post_id = $_POST["comment-post-id"];
+    $content = $_POST["comment-content"];
+    
+    $create_comment_sql = 
+    "INSERT INTO post_comment 
+        (auth_user, post, content)
+    VALUES (:auth_user_id, :post_id, :content)
+    ";
+
+    $create_comment_sth = $dbh->prepare($create_comment_sql);
+
+    $success = $create_comment_sth->execute([
+        "auth_user_id" => $auth_user_id, 
+        "post_id" => $post_id, 
+        "content" => $content
+    ]);
+
+    // make better error handling
+    if ($success) {
+        header(header: "Location: http://localhost:8080/microblog/post.php?id=$post_id");
+    } else {
+        echo "falied to add comment";
+    }
+
+} else {
+    die("Unauthorized");
+}
+```
+
+### Then the page logics, create the ```index.php``` page:
+```php
+<?php
+
+session_start();
+
+include "functions/db.php";
+include "functions/sql.php";
+
+$posts = fetch_posts($dbh);
+
 $title = "Home Page";
 include 'components/head.php';
 ?>
 
-<h1>Welcome to micro-blog!</h1>
+<h1>Welcome to microblog!</h1>
 
-<?php
-include 'components/footer.php';
-?>
+<?php if ($posts): ?>
+    <?php include "components/posts.php" ?>
+<?php else: ?>
+    <div>
+        <p>
+            <a href="login.php">Login</a> or <a href="signup.php">signup</a> to write the first post
+        </p>
+    </div>
+<?php endif ?>
+<?php include 'components/footer.php'; ?>
 ```
 
-Now you may visit the site and see the changes.
+### Then the signup and login pages
 
-Next we add the code to our other pages.
-
-login.php
-```html
+### ```signup.php```:
+```php
 <?php
-$title = "Login Page";
-include 'components/head.php';
-?>
 
-<h1>Login to your account:</h1>
-<form action="login.php" method="post">
-    <div>
-        <label for="login-email">Email:</label>
-        <input type="email" name="login-email" id="login-email">
-    </div>
-    <div>
-        <label for="login-password">Password:</label>
-        <input type="password" name="login-password" id="login-password">
-    </div>
-    <div>
-        <button type="submit">Login</button>
-    </div>
-</form>
+session_start();
 
-<?php
-include 'components/footer.php';
-?>
-```
+if ($_SESSION["auth_user"]) {
+    header(header: "Location: http://localhost:8080/microblog/index.php");
+    die();
+}
 
-signup.php
-```html
-<?php
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    
+    include "functions/db.php";
+    include "functions/sql.php";
+
+    $signup_email = $_POST["signup-email"];
+    $signup_password = $_POST["signup-password"];
+
+    $email_exists = email_exists($dbh, $signup_email);
+
+    var_dump($email_exists);
+
+    if (!$email_exists) {
+        // hash password
+        $password_hash = password_hash($signup_password, PASSWORD_DEFAULT);
+
+        $created_user = create_user($dbh, $signup_email, $password_hash);
+        if ($created_user) {
+            $_SESSION["auth_user"] = $created_user;
+            header(header: "Location: http://localhost:8080/microblog/profile.php?id=$created_user->id");
+        } else {
+            die("Failed to create user!");
+        }
+    } else {
+        die("Email already taken!");
+    }
+}
+
 $title = "Signup Page";
 include 'components/head.php';
 ?>
 
 <h1>Signup for an account:</h1>
-<form action="signup.php" method="post">
+<form action="/microblog/signup.php" method="post">
     <div>
         <label for="signup-email">Email:</label>
         <input type="email" name="signup-email" id="signup-email">
@@ -517,16 +1213,184 @@ include 'components/footer.php';
 ?>
 ```
 
-post.php
-```html
+### ```login.php```:
+```php
 <?php
+
+session_start();
+
+if ($_SESSION["auth_user"]) {
+    header(header: "Location: http://localhost:8080/microblog/index.php");
+    die();
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+
+    include "functions/db.php";
+    include "functions/sql.php";
+
+    $login_email = $_POST["login-email"];
+    $login_password = $_POST["login-password"];
+
+    $email_exists = email_exists($dbh, $login_email);
+    if ($email_exists) {
+
+        $auth_user = fetch_user_to_login($dbh, $login_email, $login_password);
+
+        if (
+            // verify password with password_hash
+            password_verify($login_password, $auth_user->password_hash)
+            && $auth_user
+        ) {
+            // set session with logged in user
+            $_SESSION["auth_user"] = $auth_user;
+            header(header: "Location: http://localhost:8080/microblog/profile.php?id=$auth_user->id");
+        } else {
+            die("Wrong password!");
+        }
+    } else {
+        die("Invalid email");
+    }
+}
+
+$title = "Login Page | $username";
+include 'components/head.php';
+?>
+
+<h1>Login to your account:</h1>
+<form action="/microblog/login.php" method="post">
+    <div>
+        <label for="login-email">Email:</label>
+        <input type="email" name="login-email" id="login-email">
+    </div>
+    <div>
+        <label for="login-password">Password:</label>
+        <input type="password" name="login-password" id="login-password">
+    </div>
+    <div>
+        <button type="submit">Login</button>
+    </div>
+</form>
+
+<?php include 'components/footer.php'; ?>
+```
+
+### ```profile.php```:
+```php
+<?php
+
+session_start();
+
+include "functions/db.php";
+include "functions/sql.php";
+
+$auth_user = $_SESSION["auth_user"];
+
+$profile_user = fetch_profile_user($dbh, $_GET["id"]);
+if (!$profile_user) {
+    die("User does not exist!");
+}
+
+$followers = fetch_followers($dbh, $profile_user->id);
+
+$posts = fetch_profile_posts($dbh, $profile_user->id);
+
+$auth_user_is_owner = $auth_user && $auth_user->id == $profile_user->id ? true : false;
+
+$follow = "/microblog/functions/follow.php";
+$unfollow = "/microblog/functions/unfollow.php";
+
+$current_user_is_following = current_user_is_following(
+    $dbh, 
+    $auth_user->id, 
+    $profile_user->id
+);
+
+$title = "Profile of $profile_user->email";
+include 'components/head.php';
+?>
+
+<h1><?= $profile_user->email ?></h1>
+
+<!-- followers section -->
+<p>Followers: <?= $followers ?></p>
+<?php if(!$auth_user_is_owner): ?>
+    <form action="<?= !$current_user_is_following ? $follow : $unfollow ?>" method="post">
+        <input type="text" name="profile-user-id" value="<?= $profile_user->id ?>" hidden>
+        <input type="submit" value="<?= !$current_user_is_following ? 'Follow' : 'Unfollow' ?>">
+    </form>
+<?php endif ?>
+
+<!-- profile dashboard -->
+<?php if($auth_user_is_owner): ?>
+    <div>
+        <div>
+            <p>Change your password:</p>
+            <form action="/microblog/functions/change_password.php" method="post">
+                <label for="change-password-input">New password:</label>
+                <input type="password" name="change-password-input">
+                <input type="submit" value="Change password">
+            </form>
+        </div>
+        <div>
+            <p>
+                <a href="/microblog/create_post.php">Create new post</a>
+            </p>
+        </div>
+    </div>
+<?php endif ?>
+
+<?php if ($posts): ?>
+    <?php include "components/posts.php" ?>
+<?php endif ?>
+
+<?php include 'components/footer.php'; ?>
+```
+
+### ```create_post.php```:
+
+```php
+<?php
+
+session_start();
+
+if (!$_SESSION["auth_user"]) {
+    header(header: "Location: http://localhost:8080/microblog/login.php");
+    die();
+}
 $title = "Create Post";
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    
+    include "functions/db.php"; 
+    include "functions/sql.php";
+
+    $auth_user_id = $_SESSION["auth_user"]->id;
+    $post_title = $_POST["post-title"];
+    $post_content = $_POST["post-content"];
+
+    $success = create_post($dbh, $auth_user_id, $post_title, $post_content);
+
+    if ($success) {
+        $last_inserted_id = $dbh->lastInsertId();
+        header(header: "Location: http://localhost:8080/microblog/post.php?id=$last_inserted_id");
+
+    }
+}
+
 include 'components/head.php';
 ?>
 
 <h1>Create Post</h1>
-<form action="post.php">
-    <textarea name="post-content" id="post-content"></textarea>
+<form action="/microblog/create_post.php" method="post">
+    <div>
+        <label for="post-title">Title:</label>
+        <input type="text" name="post-title" id="post-title">
+    </div>
+    <div>
+        <label for="post-content">Content:</label>
+        <textarea name="post-content" id="post-content"></textarea>
+    </div>
     <button type="submit">Create Post</button>
 </form>
 
@@ -535,23 +1399,96 @@ include 'components/footer.php';
 ?>
 ```
 
-profile.php
-```html
+### ```edit_post.php```:
+```php
 <?php
-$title = "Profile";
+
+session_start();
+
+if (!$_SESSION["auth_user"]) {
+    header(header: "Location: http://localhost:8080/microblog/login.php");
+    die();
+}
+
+include "functions/db.php";
+include "functions/sql.php";
+
+if ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "GET") {
+    $post_id = $_GET["id"];
+    $auth_user_id = $_SESSION["auth_user"]->id;
+
+    $post = fetch_post_to_edit($dbh, $auth_user_id, $post_id);
+    
+    if (!$post) {
+        die("Unauthorized access");
+    }
+} elseif ($_SESSION["auth_user"] && $_SERVER["REQUEST_METHOD"] == "POST") {
+    $auth_user_id = $_SESSION["auth_user"]->id;
+    $post_id = $_POST["edit-post-id"];
+    $post_title = $_POST["edit-post-title"];
+    $post_content = $_POST["edit-post-content"];
+
+    $post_edited = edit_post(
+        $dbh,
+        $auth_user_id,
+        $post_id,
+        $post_title,
+        $post_content
+    );
+
+    if ($post_edited) {
+        header(header: "Location: http://localhost:8080/microblog/post.php?id=$post_id");
+    } else {
+        die("Failed to edit post");
+    }
+}
+
+$title = "Edit Post";
 include 'components/head.php';
 ?>
 
-<!-- we later add more functionalities after we add authentication  -->
-<h1>This is the profile page!</h1>
+<h1>Edit Post</h1>
+<form action="/microblog/edit_post.php" method="post">
+    <input type="text" name="edit-post-id" id="edit-post-id" value="<?= $post->post_id ?>" hidden>
+    <div>
+        <label for="edit-post-title">Title:</label>
+        <input type="text" name="edit-post-title" id="edit-post-title" value="<?= $post->title ?>">
+    </div>
+    <div>
+        <label for="edit-post-content">Content:</label>
+        <textarea name="edit-post-content" id="edit-post-content">
+            <?= $post->content ?>
+        </textarea>
+    </div>
+    <button type="submit">Save Post</button>
+</form>
 
 <?php
 include 'components/footer.php';
 ?>
 ```
 
-That is the basic HTML code, we have to add more to it in a while.
+## Good job!
 
-### Time to move the database connection to its own file
+### Oh, btw. some styling in ```styles.css``` ^^
+```css
+.posts-section,
+.comment-section {
+    padding: 1rem;
+    margin-top: 1rem;
+    border: 1px solid black;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
 
-...
+.post-card,
+.comment-card {
+    padding: 1rem;
+    border: 1px solid black;
+}
+
+textarea {
+    width: 100%;
+}
+```
